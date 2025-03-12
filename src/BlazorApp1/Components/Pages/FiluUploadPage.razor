@@ -1,0 +1,28 @@
+@page "/file-upload"
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="mb-4">Загрузка файла</MudText>
+
+    <InputFile OnChange="ShowDialog" accept=".csv,.xml" />
+    @* <MudFileUpload T="IReadOnlyList<IBrowserFile>" AppendMultipleFiles="true" FilesChanged="OnFileChange" MaximumFileCount="1000"> *@
+    @*      *@
+    @*     <ButtonTemplate> *@
+    @*         <MudButton HtmlTag="label" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudUpload"  *@
+    @*                    Class="attach-files-label"> Upload *@
+    @*         </MudButton> *@
+    @*     </ButtonTemplate> *@
+    @* </MudFileUpload> *@
+
+
+
+    @if (!string.IsNullOrEmpty(FileName))
+    {
+        <MudText Typo="Typo.body1" Class="mt-4">Выбран файл: <strong>@FileName</strong></MudText>
+    }
+    
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@ErrorMessage</MudAlert>
+    }
+</MudContainer>

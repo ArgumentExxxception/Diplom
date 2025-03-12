@@ -1,0 +1,42 @@
+@page "/create-table"
+@inject ISnackbar Snackbar
+
+<MudContainer>
+    <MudText Typo="Typo.h4" Class="mb-4">Создание новой таблицы</MudText>
+    
+    <MudTextField @bind-Value="tableName" Label="Название таблицы" Variant="Variant.Outlined" Class="mb-4" />
+    
+    <MudPaper Elevation="25" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" Class="mb-3">Добавить колонку</MudText>
+
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="newColumnName" Label="Название колонки" Variant="Variant.Outlined" />
+        </MudItem>
+
+        <MudItem xs="12" sm="6">
+            <MudSelect T="Types" @bind-Value="newColumnType" Label="Тип данных" Variant="Variant.Outlined">
+                <MudSelectItem T="Types" Value="Types.Text">Текст</MudSelectItem>
+                <MudSelectItem T="Types" Value="Types.Number">Число</MudSelectItem>
+                <MudSelectItem T="Types" Value="Types.Date">Дата</MudSelectItem>
+                <MudSelectItem T="Types" Value="Types.Boolean">Логическое значение</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+
+        <MudButton OnClick="AddColumn" Color="Color.Primary" Class="mt-3">Добавить колонку</MudButton>
+    </MudPaper>
+    
+    <MudText Typo="Typo.h6" Class="mb-3">Предварительный просмотр колонок</MudText>
+    <MudTable Items="columns" Hover="true" Striped="true">
+        <HeaderContent>
+            <MudTh>Название колонки</MudTh>
+            <MudTh>Тип данных</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@context.Type</MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <!-- Кнопка для отправки данных -->
+    <MudButton OnClick="CreateTable" Color="Color.Success" Class="mt-4">Создать таблицу</MudButton>
+</MudContainer>

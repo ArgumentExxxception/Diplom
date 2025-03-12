@@ -1,0 +1,13 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6">Выберите действие:</MudText>
+        <MudRadioGroup T="string" @bind-SelectedOption="SelectedAction">
+            <MudRadio T="string" />
+            <MudRadio T="string"  />
+        </MudRadioGroup>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Отмена</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">ОК</MudButton>
+    </DialogActions>
+</MudDialog>
