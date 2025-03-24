@@ -1,0 +1,34 @@
+﻿@page "/public-tables"
+@using Core.Models
+
+@if (_isInitialized)
+{
+    <MudTextField @bind-Value="searchString" Label="Поиск по названию" Variant="Variant.Outlined" />
+
+    <MudTable Items="FilteredTables" Hover="true" Striped="true" RowsPerPage="5">
+        <HeaderContent>
+            <MudTh OnClick="() => SortByTableName()">
+                Название таблицы
+                <MudIcon Icon="@(sortByTableNameAsc ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward)" />
+            </MudTh>
+            <MudTh>Колонки</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.TableName <MudIcon Icon="@Icons.Material.Filled.TableChart" /></MudTd>
+            <MudTd>
+                <MudChipSet T="List<ColumnInfo>">
+                    @foreach (var column in context.Columns)
+                    {
+                        <MudChip T="ColumnInfo" Color="Color.Primary" Variant="Variant.Outlined">
+                            <MudIcon Icon="@Icons.Material.Filled.ViewColumn" />
+                            @column.Name (@column.Type)
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}

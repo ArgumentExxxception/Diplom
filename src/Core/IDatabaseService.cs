@@ -1,6 +1,11 @@
+using Core.Models;
+
 namespace Core;
 
 public interface IDatabaseService
 {
-    Task<IEnumerable<string>> GetPublicTablesAsync();
+    Task<List<TableModel>> GetPublicTablesAsync();
+    Task CreateTableAsync(TableModel tableModel);
+
+    Task<List<ColumnInfo>> GetColumnInfoAsync(string tableName);
 }

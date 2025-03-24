@@ -21,6 +21,11 @@ public class UnitOfWork: IUnitOfWork
     {
         return await _context.Database.SqlQueryRaw<T>(sqlQuery).ToListAsync();
     }
+    public async Task<T> ExecuteScalarAsync<T>(string sqlQuery)
+    {
+        var result = await _context.Database.SqlQueryRaw<T>(sqlQuery).FirstOrDefaultAsync();
+        return result;
+    }
 
     public void Dispose()
     {

@@ -1,5 +1,5 @@
 using App.Components.Dialogs;
-using BlazorApp1.Interfaces;
+using App.Interfaces;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MudBlazor;
