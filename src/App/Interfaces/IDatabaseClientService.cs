@@ -1,6 +1,9 @@
-namespace BlazorApp1.Interfaces;
+using Core.Models;
+
+namespace App.Interfaces;
 
 public interface IDatabaseClientService
 {
-    Task<IEnumerable<string>> GetPublicTablesAsync();
+    Task<List<TableModel>> GetPublicTablesAsync();
+    Task<string> CreateTablesAsync(TableModel tableModel);
 }

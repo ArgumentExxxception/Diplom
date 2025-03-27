@@ -1,0 +1,286 @@
+﻿@page "/import-data"
+@using Core.Enums
+@using Core.Errors
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+<PageTitle>Импорт данных</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Импорт данных</MudText>
+
+    <MudTabs ActivePanelIndexChanged="SetActiveTab" bind-ActivePanelIndex="_activePanelIndex" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" @ref="_tabs">
+        <MudTabPanel Text="Импорт в существующую таблицу" Icon="@Icons.Material.Filled.TableChart">
+            <MudCard Elevation="4" Class="mb-4">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Выбор файла и параметров</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="string" Label="Таблица" @bind-Value="selectedTable" Required="true"
+                                       HelperText="Выберите таблицу для импорта данных"
+                                       AdornmentIcon="@Icons.Material.Filled.Storage" AdornmentColor="Color.Primary"
+                                       SelectedValuesChanged="@(async () => await LoadTableStructure(selectedTable))">
+                                @foreach (var table in availableTables)
+                                {
+                                    <MudSelectItem Value="@table">@table</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="int" Label="Режим импорта" @bind-Value="importMode" Required="true"
+                                       HelperText="Выберите режим импорта данных"
+                                       AdornmentIcon="@Icons.Material.Filled.MergeType" AdornmentColor="Color.Primary">
+                                <MudSelectItem Value="0">Полная замена данных</MudSelectItem>
+                                <MudSelectItem Value="1">Только добавление новых</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+
+                        <MudExpansionPanel bind-Expanded="@isExpanded" ExpandedChanged="OnExpandedChanged" Class="mb-4">
+                            <TitleContent>
+                                <MudText Typo="Typo.h6">Структура колонок таблицы</MudText>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudTable Items="@tableStructure" Hover="true" Striped="true" Bordered="true">
+                                    <HeaderContent>
+                                        <MudTh>Имя колонки</MudTh>
+                                        <MudTh>Тип данных</MudTh>
+                                        <MudTh>Обязательное</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Имя колонки">@context.Name</MudTd>
+                                        <MudTd DataLabel="Тип данных">@context.Type</MudTd>
+                                        <MudTd DataLabel="Обязательное">
+                                            <MudCheckBox T="bool" @bind-Checked="context.IsRequired" Color="Color.Primary" />
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudTabPanel>
+        <MudTabPanel Text="Импорт в новую таблицу" Icon="@Icons.Material.Filled.Add">
+            <MudContainer>
+                <MudText Typo="Typo.h4" Class="mb-4">Создание новой таблицы</MudText>
+
+                <MudTextField @bind-Value="_tableName" Label="Название таблицы" Variant="Variant.Outlined" Class="mb-4" />
+
+                <MudPaper Elevation="25" Class="pa-4 mb-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">Добавить колонку</MudText>
+
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_newColumnName" Label="Название колонки" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="int" @bind-Value="_newColumnType" Label="Тип данных" Variant="Variant.Outlined">
+                            <MudSelectItem T="int" Value="0">Текст</MudSelectItem>
+                            <MudSelectItem T="int" Value="1">Число</MudSelectItem>
+                            <MudSelectItem T="int" Value="2">Дата</MudSelectItem>
+                            <MudSelectItem T="int" Value="3">Логическое значение</MudSelectItem>
+                            <MudSelectItem T="int" Value="4">Дробное число</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox T="bool" @bind-Value="_newColumnIsPrimaryKey" Label="Первичный ключ" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox T="bool" @bind-Value="_newColumnIsRequired" Label="Обязательное поле" />
+                    </MudItem>
+
+                    <MudButton OnClick="AddColumn" Color="Color.Primary" Class="mt-3">Добавить колонку</MudButton>
+                </MudPaper>
+
+                <MudExpansionPanel bind-Expanded="@isExpanded" ExpandedChanged="OnExpandedChanged" Class="mb-4">
+                    <TitleContent>
+                        <MudText Typo="Typo.h6" Class="mb-3">Предварительный просмотр колонок</MudText>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudTable Items="columns" Hover="true" Striped="true">
+                            <HeaderContent>
+                                <MudTh>Название колонки</MudTh>
+                                <MudTh>Тип данных</MudTh>
+                                <MudTh>Первичный ключ</MudTh>
+                                <MudTh>Обязательное поле</MudTh>
+                                <MudTh>Действия</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.Name</MudTd>
+                                <MudTd>@context.Type</MudTd>
+                                <MudTd>@context.IsPrimaryKey</MudTd>
+                                <MudTd>@context.IsRequired</MudTd>
+                                <MudTd>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="() => RemoveColumn(context)" Color="Color.Error" Size="Size.Small" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudContainer>
+        </MudTabPanel>
+    </MudTabs>
+
+    <MudCard Elevation="4" Class="mb-4 pa-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Параметры импорта и выбор файла</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudFileUpload T="IBrowserFile" OnFilesChanged="OnInputFileChanged" Accept=".csv,.xml" MaxFiles="1" Class="mt-3">
+                        <ActivatorContent>
+                            <MudButton HtmlTag="label"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                            >
+                                @if (selectedFile == null)
+                                {
+                                    <span>Выбрать файл (CSV или XML)</span>
+                                }
+                                else
+                                {
+                                    <span>@selectedFile.Name</span>
+                                }
+                            </MudButton>
+                        </ActivatorContent>
+                    </MudFileUpload>
+                    @if (selectedFile != null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-1">Размер файла: @(selectedFile.Size / 1024) Кб</MudText>
+                    }
+                </MudItem>
+
+                @if (IsXMLFile())
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="@xmlRootElement"
+                                      Label="Корневой элемент XML"
+                                      HelperText="Название корневого элемента (по умолчанию определяется автоматически)"
+                                      AdornmentIcon="@Icons.Material.Filled.Code" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="@xmlRowElement"
+                                      Label="Элемент строки XML"
+                                      HelperText="Название элемента, представляющего строку данных"
+                                      AdornmentIcon="@Icons.Material.Filled.ViewList" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="@(async () => await StartImport())"
+                       Disabled="@(!CanStartImport())"
+                       StartIcon="@Icons.Material.Filled.Publish">
+                Начать импорт
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       OnClick="ResetForm"
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Сбросить
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+    
+    @if (isImporting)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        <MudText>Выполняется импорт данных...</MudText>
+    }
+    
+    @if (importResult != null)
+    {
+        <MudCard Elevation="4" Class="mt-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Результат импорта</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudChip T="string" Color="@(importResult.Success ? Color.Success : Color.Error)" 
+                             Icon="@(importResult.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)">
+                        @(importResult.Success ? "Успешно" : "Ошибка")
+                    </MudChip>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudText>@importResult.Message</MudText>
+                    </MudItem>
+                    
+                    @if (importResult.Success)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudPaper Class="pa-4 mud-theme-primary">
+                                <MudText Typo="Typo.h6" Class="mb-2">Обработано строк</MudText>
+                                <MudText Typo="Typo.h4">@importResult.RowsProcessed</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudPaper Class="pa-4 mud-theme-secondary">
+                                <MudText Typo="Typo.h6" Class="mb-2">Добавлено</MudText>
+                                <MudText Typo="Typo.h4">@importResult.RowsInserted</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudPaper Class="pa-4 mud-theme-tertiary">
+                                <MudText Typo="Typo.h6" Class="mb-2">Обновлено</MudText>
+                                <MudText Typo="Typo.h4">@importResult.RowsUpdated</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudPaper Class="pa-4 mud-theme-default">
+                                <MudText Typo="Typo.h6" Class="mb-2">Пропущено</MudText>
+                                <MudText Typo="Typo.h4">@importResult.RowsSkipped</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                Время выполнения: @(importResult.ElapsedTimeMs/1000) секунд
+                            </MudText>
+                        </MudItem>
+                    }
+                    else
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Error" Class="mt-3">
+                                <MudText>@importResult.Message</MudText>
+                            </MudAlert>
+                            
+                            @if (importResult.Errors != null && importResult.Errors.Count > 0)
+                            {
+                                <MudExpansionPanel Class="mt-2">
+                                    <TitleContent>
+                                        <MudText>Детали ошибок (@importResult.Errors.Count)</MudText>
+                                    </TitleContent>
+                                    <ChildContent>
+                                        <MudList T="List<ImportError>" Dense="true">
+                                            @foreach (var error in importResult.Errors)
+                                            {
+                                                <MudListItem T="ImportError" Icon="@Icons.Material.Filled.Error">
+                                                    Строка @error.RowNumber, Колонка '@error.Column': @error.ErrorMessage
+                                                    @if (!string.IsNullOrEmpty(error.OriginalValue))
+                                                    {
+                                                        <MudText Typo="Typo.caption">Исходное значение: '@error.OriginalValue'</MudText>
+                                                    }
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    </ChildContent>
+                                </MudExpansionPanel>
+                            }
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudContainer>

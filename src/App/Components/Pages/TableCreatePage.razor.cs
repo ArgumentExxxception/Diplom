@@ -1,6 +1,6 @@
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-using System.Net;
+using App.Interfaces;
+using Core.Enums;
+using Core.Models;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 
@@ -8,14 +8,18 @@ namespace App.Components.Pages;
 
 public partial class TableCreatePage : ComponentBase
 {
-    private string tableName = string.Empty;
-    private string newColumnName = string.Empty;
-    private Types newColumnType = Types.Text; // По умолчанию текст
+    private string _tableName = string.Empty;
+    private string _newColumnName = string.Empty;
+    private int _newColumnType = 0;
+    private bool _newColumnIsPrimaryKey = false;
+    private bool _newColumnIsRequired = true;
     private List<ColumnInfo> columns = new();
+    
+    [Inject] private IDatabaseClientService _databaseClientService { get; set; }
 
     private void AddColumn()
     {
-        if (string.IsNullOrWhiteSpace(newColumnName))
+        if (string.IsNullOrWhiteSpace(_newColumnName))
         {
             Snackbar.Add("Введите название колонки.", Severity.Warning);
             return;
@@ -23,18 +27,26 @@ public partial class TableCreatePage : ComponentBase
 
         columns.Add(new ColumnInfo
         {
-            Name = newColumnName,
-            Type = newColumnType
+            Name = _newColumnName,
+            Type = _newColumnType,
+            IsRequired = _newColumnIsRequired,
+            IsPrimaryKey = _newColumnIsPrimaryKey
         });
-
-        // Очищаем поля после добавления
-        newColumnName = string.Empty;
-        newColumnType = Types.Text;
+        
+        _newColumnName = string.Empty;
+        _newColumnType = 0;
+        _newColumnIsPrimaryKey = false;
+        _newColumnIsRequired = true;
+    }
+    
+    private void RemoveColumn(ColumnInfo column)
+    {
+        columns.Remove(column);
     }
 
     private async Task CreateTable()
     {
-        if (string.IsNullOrWhiteSpace(tableName))
+        if (string.IsNullOrWhiteSpace(_tableName))
         {
             Snackbar.Add("Введите название таблицы.", Severity.Warning);
             return;
@@ -46,47 +58,29 @@ public partial class TableCreatePage : ComponentBase
             return;
         }
 
-        // Отправляем данные на сервер
-        var tableData = new TableCreationRequest
+        var tableData = new TableModel
         {
-            TableName = tableName,
-            Columns = columns
+            TableName = _tableName,
+            Columns = columns,
+            PrimaryKey = columns.FirstOrDefault(c => c.IsPrimaryKey)?.Name ?? columns[0].Name,
+            TableData = new List<string>()
         };
 
         try
         {
-            // await WebRequestMethods.Http.PostAsJsonAsync("/api/table/create", tableData);
+            var result = await _databaseClientService.CreateTablesAsync(tableData);
             Snackbar.Add("Таблица успешно создана!", Severity.Success);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Ошибка: {ex.Message}", Severity.Error);
         }
-    }
-
-    public class ColumnInfo
-    {
-        public string Name { get; set; }
-        public Types Type { get; set; }
-    }
-
-    public class TableCreationRequest
-    {
-        public string TableName { get; set; }
-        public List<ColumnInfo> Columns { get; set; }
-    }
-
-    public enum Types
-    {
-        [Display(Name = "Текст")]
-        Text = 0,
-        [Display(Name = "Число")]
-        Number = 1,
-        [Display(Name = "Дата")]
-        Date = 2,
-        [Display(Name = "Логическое выражение")]
-        Boolean = 3,
-        [Display(Name = "Короткий текст")]
-        Varchar = 4,
+        finally
+        {
+            _newColumnName = string.Empty;
+            _newColumnType = 0;
+            _newColumnIsPrimaryKey = false;
+            _newColumnIsRequired = true;
+        }
     }
 }

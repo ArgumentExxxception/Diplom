@@ -1,0 +1,58 @@
+﻿@page "/login"
+<MudCard Elevation="25" Class="pa-4" Style="max-width: 500px; margin: 0 auto;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Align="Align.Center">Вход в систему</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudForm @bind-IsValid="@formValid">
+            <MudTextField T="string"
+                          Label="Имя пользователя"
+                          Required="true"
+                          RequiredError="Имя пользователя обязательно"
+                          @bind-Value="loginModel.Username" />
+
+            <MudTextField T="string"
+                          Label="Пароль"
+                          Required="true"
+                          RequiredError="Пароль обязателен"
+                          InputType="InputType.Password"
+                          @bind-Value="loginModel.Password" />
+
+            <MudCheckBox @bind-Value="@loginModel.RememberMe"
+                         Label="Запомнить меня"
+                         Color="Color.Primary" />
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3 mb-3">@error</MudAlert>
+            }
+        </MudForm>
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!formValid && loading)"
+                   OnClick="HandleLogin"
+                   FullWidth="true"
+                   Size="Size.Large">
+            @if (loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Вход...</span>
+            }
+            else
+            {
+                <span>Войти</span>
+            }
+        </MudButton>
+    </MudCardActions>
+    <MudCardActions>
+        <MudButton Variant="Variant.Text"
+                   Link="/register"
+                   FullWidth="true">
+            Нет учетной записи? Зарегистрироваться
+        </MudButton>
+    </MudCardActions>
+</MudCard>

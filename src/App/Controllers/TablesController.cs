@@ -16,23 +16,23 @@ public class TabelsController: ControllerBase
     }
     
     [HttpGet("public")]
-    public async Task<ActionResult<List<string>>> GetPublicTables()
+    public async Task<ActionResult<List<TableModel>>> GetPublicTables()
     {
         var tables = await _databaseService.GetPublicTablesAsync();
         return Ok(tables);
     }
     
     [HttpPost("create")]
-    public async Task<IActionResult> CreateTable([FromBody] MappingRequest request)
+    public async Task<IActionResult> CreateTable([FromBody] TableModel request)
     {
         try
         {
-            if (request == null || request.MappedColumns == null || request.FileData == null)
+            if (request == null || string.IsNullOrEmpty(request.TableName))
             {
                 return BadRequest("Некорректные данные.");
             }
-
-            // await _tableService.CreateTableAsync(request);
+            
+            await _databaseService.CreateTableAsync(request);
             return Ok("Таблица успешно создана.");
         }
         catch (Exception ex)
