@@ -19,15 +19,14 @@ public class FileHandlerService: IFileHandlerService
 {
     private readonly IDataImportRepository _dataImportRepository;
     private readonly IDatabaseService _databaseService;
-    private readonly IAppLogger<FileHandlerService> _logger;
+    // private readonly IAppLogger<FileHandlerService> _logger;
     
     private const string MODIFIED_DATE_COLUMN = "lastmodifiedon";
     private const string MODIFIED_BY_COLUMN = "lastmodifiedby";
     
-    public FileHandlerService(IDataImportRepository dataImportRepository, IAppLogger<FileHandlerService> logger, IDatabaseService databaseService)
+    public FileHandlerService(IDataImportRepository dataImportRepository, IDatabaseService databaseService)
     {
         _dataImportRepository = dataImportRepository;
-        _logger = logger;
         _databaseService = databaseService;
     }
 
@@ -201,20 +200,16 @@ public class FileHandlerService: IFileHandlerService
     {
         try
         {
-            _logger.LogInformation("Начало обработки XML-файла. Таблица: {TableName}, Пользователь: {UserName}",importRequest.TableName, userName);
             List<Dictionary<string,object>> existingData = new List<Dictionary<string, object>>();
             
             if ((ImportMode)importRequest.ImportMode == ImportMode.Replace)
             {
-                _logger.LogDebug("Режим импорта: Replace. Очистка таблицы {TableName}", importRequest.TableName);
                 await _dataImportRepository.ClearTableAsync(importRequest.TableName);
             }
 
             if (!importRequest.IsNewTable)
             {
-                _logger.LogDebug("Загрузка существующих данных из таблицы {TableName}", importRequest.TableName);
                 existingData = await _dataImportRepository.GetExistingDataAsync(importRequest.TableName);
-                _logger.LogDebug("Загружено {ExistingDataCount} строк из таблицы {TableName}", existingData.Count, importRequest.TableName);
             }
             
             // Настройки для XmlReader
@@ -229,8 +224,6 @@ public class FileHandlerService: IFileHandlerService
             string rootElement = string.IsNullOrEmpty(importRequest.XmlRootElement) ? "root" : importRequest.XmlRootElement;
             string rowElement = string.IsNullOrEmpty(importRequest.XmlRowElement) ? "row" : importRequest.XmlRowElement;
             
-            _logger.LogDebug("Корневой элемент: {RootElement}, Элемент строки: {RowElement}", rootElement, rowElement);
-
             // Сбрасываем позицию потока
             fileStream.Position = 0;
             using var reader = XmlReader.Create(fileStream, settings);
@@ -259,12 +252,10 @@ public class FileHandlerService: IFileHandlerService
                 if (reader.NodeType == XmlNodeType.Element && (reader.Name == rowElement || reader.Depth == 1))
                 {
                     rowIndex++;
-                    _logger.LogDebug($"Обрабатывается строка #{rowIndex} в XML");
 
                     // Получаем имя текущего элемента как элемента строки, если rowElement не указан
                     if (string.IsNullOrEmpty(importRequest.XmlRowElement))
                     {
-                        _logger.LogDebug("Пустой элемент строки. Пропуск.");
                         rowElement = reader.Name;
                     }
 
@@ -316,7 +307,6 @@ public class FileHandlerService: IFileHandlerService
                                             RowNumber = rowIndex,
                                             ErrorMessage = $"Отсутствует обязательное поле '{column.Name}'"
                                         });
-                                        _logger.LogWarning("Пустое обязательное поле '{ColumnName}' в строке {RowIndex}", column.Name, rowIndex);
                                     }
 
                                     columnIndex++;
@@ -355,7 +345,6 @@ public class FileHandlerService: IFileHandlerService
                                             ErrorMessage = $"Отсутствует обязательное поле '{column.Name}'"
                                         });
                                         
-                                        _logger.LogWarning("Пустое обязательное поле '{ColumnName}' в строке {RowIndex}", column.Name, rowIndex);
                                     }
                                 }
                                 catch (Exception ex)
@@ -367,7 +356,6 @@ public class FileHandlerService: IFileHandlerService
                                         RowNumber = rowIndex,
                                         ErrorMessage = $"Ошибка в элементе '{column.Name}': {ex.Message}. Значение: '{columnValue}'"
                                     });
-                                    _logger.LogError(ex, "Ошибка при обработке поля '{ColumnName}' в строке {RowIndex}", column.Name, rowIndex);
                                 }
 
                                 columnIndex++;
@@ -376,7 +364,6 @@ public class FileHandlerService: IFileHandlerService
                             {
                                 // Если элементов больше, чем колонок в таблице, пропускаем их
                                 // Можно добавить логирование
-                                _logger.LogDebug("Элемент XML '{ElementName}' пропущен, так как колонок в таблице меньше", reader.Name);
                             }
                         }
                     }
@@ -393,7 +380,6 @@ public class FileHandlerService: IFileHandlerService
                                 RowNumber = rowIndex,
                                 ErrorMessage = $"Отсутствует обязательное поле '{column.Name}'"
                             });
-                            _logger.LogWarning("Отсутствует обязательное поле '{ColumnName}' в строке {RowIndex}", column.Name, rowIndex);
                         }
                     }
                     
@@ -412,13 +398,11 @@ public class FileHandlerService: IFileHandlerService
                             {
                                 duplicatedRows.Add(rowData);
                                 result.RowsSkipped++;
-                                _logger.LogDebug("Дубликат строки {RowIndex}. Пропуск.", rowIndex);
                             }
                             else
                             {
                                 rowsToImport.Add(rowData);
                                 result.RowsInserted++;
-                                _logger.LogDebug("Строка {RowIndex} добавлена для импорта.", rowIndex);
                             }
 
                         }
@@ -426,7 +410,6 @@ public class FileHandlerService: IFileHandlerService
                         {
                             rowsToImport.Add(rowData);
                             result.RowsInserted++;
-                            _logger.LogDebug("Строка {RowIndex} добавлена для импорта.", rowIndex);    
                         }
 
                     }
@@ -436,31 +419,24 @@ public class FileHandlerService: IFileHandlerService
                     // Пакетная обработка для экономии памяти
                     if (rowsToImport.Count >= 1000)
                     {
-                        _logger.LogDebug("Пакетная обработка: импорт {BatchSize} строк", rowsToImport.Count);
-                        await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                        await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
                         rowsToImport.Clear();
                     }
                 }
             }
             
             result.DuplicatedRows = duplicatedRows;
-            _logger.LogDebug("Обнаружено {DuplicatedRowsCount} дубликатов", duplicatedRows.Count);
             
             // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
-                _logger.LogDebug("Импорт оставшихся {RemainingRowsCount} строк", rowsToImport.Count);
                 await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
             }
             result.RowsUpdated = result.RowsProcessed - result.RowsInserted - result.RowsSkipped - result.ErrorCount;
-            
-            _logger.LogInformation("Импорт завершен. Обработано строк: {RowsProcessed}, Добавлено: {RowsInserted}, Обновлено: {RowsUpdated}, Пропущено: {RowsSkipped}, Ошибок: {ErrorCount}",
-                result.RowsProcessed, result.RowsInserted, result.RowsUpdated, result.RowsSkipped, result.ErrorCount);
         }
         catch (Exception ex)
         {
             result.ErrorCount++;
-            _logger.LogError(ex, "Ошибка при обработке XML-файла");
             result.Errors.Add(new ImportError
             {
                 // RowNumber = rowIndex,
@@ -468,6 +444,40 @@ public class FileHandlerService: IFileHandlerService
             });
         }
     }
+    
+    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, int maxParallelism = 4)
+    {
+        if (rowsToImport.Count == 0) return;
+
+        int batchSize = 1000;
+        var batches = rowsToImport.Select((row, index) => new { row, index })
+            .GroupBy(x => x.index / batchSize)
+            .Select(g => g.Select(x => x.row).ToList())
+            .ToList();
+
+        using var semaphore = new SemaphoreSlim(maxParallelism);
+        var tasks = new List<Task>();
+
+        foreach (var batch in batches)
+        {
+            await semaphore.WaitAsync();
+
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
+    }
+
 
     #endregion
 
@@ -783,9 +793,25 @@ public class FileHandlerService: IFileHandlerService
 
                     case ColumnTypes.Date:
                         // Для дат
-                        var result = ConvertDataValue(value, dataTypeInt);
-
-                        return result;
+                        string[] dateFormats = new[]
+                        {
+                            "dd.MM.yyyy", // Например, 15.06.2021
+                            "yyyy-MM-dd",  // Например, 2021-06-15
+                            "MM/dd/yyyy",  // Например, 06/15/2021
+                            "dd/MM/yyyy",  // Например, 15/06/2021
+                            "yyyy/MM/dd"   // Например, 2021/06/15
+                        };
+                
+                        if (DateTime.TryParseExact(value, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateValue))
+                        {
+                            if (dateValue.Kind == DateTimeKind.Unspecified)
+                            {
+                                dateValue = DateTime.SpecifyKind(dateValue, DateTimeKind.Utc);
+                            }
+                            return dateValue;
+                        }
+                        throw new FormatException("Некорректный формат даты.");
+                    
                     case ColumnTypes.Text:
                     default:
                         // Для текстовых типов просто возвращаем строку
@@ -796,33 +822,6 @@ public class FileHandlerService: IFileHandlerService
             {
                 throw new FormatException($"Невозможно преобразовать '{value}' в тип {dataType}: {ex.Message}", ex);
             }
-        }
-        
-        private object ConvertDataValue(string value, int columnType)
-        {
-            if ((ColumnTypes)columnType == ColumnTypes.Date)
-            {
-                string[] dateFormats = new[]
-                {
-                    "dd.MM.yyyy", // Например, 15.06.2021
-                    "yyyy-MM-dd",  // Например, 2021-06-15
-                    "MM/dd/yyyy",  // Например, 06/15/2021
-                    "dd/MM/yyyy",  // Например, 15/06/2021
-                    "yyyy/MM/dd"   // Например, 2021/06/15
-                };
-                
-                if (DateTime.TryParseExact(value, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateValue))
-                {
-                    if (dateValue.Kind == DateTimeKind.Unspecified)
-                    {
-                        dateValue = DateTime.SpecifyKind(dateValue, DateTimeKind.Utc);
-                    }
-                    return dateValue;
-                }
-                throw new FormatException("Некорректный формат даты.");
-            }
-
-            return null;
         }
         
        

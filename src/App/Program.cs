@@ -1,12 +1,22 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using MudBlazor.Services;
 using App.Interfaces;
 using App.Services;
+using Blazored.LocalStorage;
 using Core;
 using Core.Logging;
+using Core.Validators;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Infrastructure;
 using Infrastructure.Logging;
+using Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Events;
 
@@ -37,7 +47,7 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri("http://
 builder.Services.AddEntityFrameworkNpgsql().AddDbContext<Context>
 (opt =>
 {
-    opt.UseNpgsql(c => c.MigrationsAssembly("App"));
+    opt.UseNpgsql(c => c.MigrationsAssembly("Infrastructure"));
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DbConnection"));
 });
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -49,10 +59,61 @@ builder.Services.AddScoped<IFileHandlerService, FileHandlerService>();
 builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
 builder.Services.AddScoped<IDataImportRepository, DataImportRepository>();
 builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
+builder.Services.AddScoped<IAuthClientService,AuthClientService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = long.MaxValue;
 });
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.SaveToken = true;
+        options.RequireHttpsMetadata = false; // В продакшн установите true
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+            ClockSkew = TimeSpan.Zero // Убирает стандартную 5-минутную погрешность в проверке времени
+        };
+
+        // Обработка событий JWT аутентификации (опционально)
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
+                var token = context.SecurityToken as JwtSecurityToken;
+                if (token != null)
+                {
+                    var isValid = await authService.ValidateTokenAsync(token.RawData);
+                    if (!isValid)
+                    {
+                        context.Fail("Токен находится в черном списке");
+                    }
+                }
+            }
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
+});
+builder.Services.AddBlazoredLocalStorage(); 
+builder.Services.AddFluentValidationClientsideAdapters();
+builder.Services.AddValidatorsFromAssemblyContaining<LoginModelValidator>();
 
 
 var app = builder.Build();
@@ -78,6 +139,9 @@ try
     app.MapRazorComponents<App.Components.App>()
         .AddInteractiveServerRenderMode();
     app.MapControllers();
+    
+    app.UseAuthentication();
+    app.UseAuthorization();
 
     app.Run();
 }

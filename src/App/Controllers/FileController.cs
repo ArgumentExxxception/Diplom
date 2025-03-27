@@ -1,6 +1,7 @@
 ﻿using Core;
 using Core.Models;
 using Core.Results;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using JsonException = System.Text.Json.JsonException;
@@ -11,6 +12,7 @@ namespace App.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class FileController: ControllerBase
 {
     private IFileHandlerService _fileHandlerService { get; set; }

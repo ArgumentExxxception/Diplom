@@ -23,23 +23,25 @@ public class Repository<TEntity>: IRepository<TEntity> where TEntity : class
         return await _dbSet.FindAsync(id);
     }
 
-    public void Add(TEntity entity)
+    public async Task<bool> Add(TEntity entity)
     {
-        _dbSet.Add(entity);
+        await _dbSet.AddAsync(entity);
+        return true;
     }
 
-    public void Update(TEntity entity)
+    public async Task<bool> Update(TEntity entity)
     {
-        _dbSet.Attach(entity);
+        _dbSet.Update(entity);
         _context.Entry(entity).State = EntityState.Modified;
+        return true;
     }
     
-    public void Delete(TEntity entity)
+    public async Task<bool> Delete(int id)
     {
-        if (_context.Entry(entity).State == EntityState.Detached)
-        {
-            _dbSet.Attach(entity);
-        }
-        _dbSet.Remove(entity);
+        var user = await GetByIdAsync(id);
+        if (user == null) return false;
+
+        _dbSet.Remove(user);
+        return true;
     }
 }

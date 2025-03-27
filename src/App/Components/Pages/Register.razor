@@ -1,0 +1,97 @@
+﻿@page "/Register"
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex justify-center align-center" Style="height: 100vh;">
+    <MudPaper Elevation="25" Class="pa-8" Style="width: 500px;">
+        <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">Регистрация</MudText>
+        <MudForm @ref="form" @bind-IsValid="@isFormValid">
+            <MudTextField
+                T="string"
+                Label="Имя пользователя"
+                Required="true"
+                RequiredError="Имя пользователя обязательно"
+                @bind-Value="registerModel.Username"
+                Validation="@(new Func<string, IEnumerable<string>>(ValidateUsername))"
+                Immediate="true"
+                HelperText="Минимум 3 символа, только буквы и цифры" />
+
+            <MudTextField
+                T="string"
+                Label="Email"
+                Required="true"
+                RequiredError="Email обязателен"
+                @bind-Value="registerModel.Email"
+                Validation="@(new Func<string, string>(ValidateEmail))"
+                InputType="InputType.Email"
+                HelperText="Введите корректный email"
+                Class="mt-3" />
+
+            <MudTextField
+                T="string"
+                Label="Пароль"
+                Required="true"
+                RequiredError="Пароль обязателен"
+                @bind-Value="registerModel.Password"
+                Validation="@(new Func<string, IEnumerable<string>>(ValidatePassword))"
+                InputType="@(showPassword ? InputType.Text : InputType.Password)"
+                Adornment="Adornment.End"
+                AdornmentIcon="@(showPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+                OnAdornmentClick="() => showPassword = !showPassword"
+                AdornmentAriaLabel="Показать пароль"
+                HelperText="Минимум 8 символов, должен содержать буквы и цифры"
+                Class="mt-3" />
+
+            <MudTextField
+                T="string"
+                Label="Подтверждение пароля"
+                Required="true"
+                RequiredError="Подтверждение пароля обязательно"
+                @bind-Value="registerModel.ConfirmPassword"
+                Validation="@(new Func<string, string>(ValidateConfirmPassword))"
+                InputType="@(showConfirmPassword ? InputType.Text : InputType.Password)"
+                Adornment="Adornment.End"
+                AdornmentIcon="@(showConfirmPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+                OnAdornmentClick="() => showConfirmPassword = !showConfirmPassword"
+                AdornmentAriaLabel="Показать пароль"
+                Class="mt-3" />
+
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity ="Severity.Error" Class ="mt-4 mb-4">
+                    @errorMessage
+                </MudAlert>
+            }
+            <div class="d-flex flex-column gap-4 mt-6">
+                <MudButton
+                    Variant="Variant.Filled"
+                    Color="Color.Primary"
+                    Size="Size.Large"
+                    FullWidth="true"
+                    OnClick="HandleRegister"
+                    Disabled="@(!isFormValid || isProcessing)">
+
+                    @if(isProcessing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate ="true" Class = "mr-2"/>
+                            <span>Регистрация...</span>
+                    }
+                    else
+                    {
+                        <span>
+                             Зарегистрироваться
+                        </span>
+                    }
+
+                </MudButton>
+
+                <MudButton
+                    Variant="Variant.Outlined"
+                    Color="Color.Primary"
+                    FullWidth="true"
+                    Link="/login"
+                    Disabled="@isProcessing">
+                    У меня уже есть аккаунт
+                </MudButton>
+            </div>
+        </MudForm>
+    </MudPaper>
+</MudContainer>

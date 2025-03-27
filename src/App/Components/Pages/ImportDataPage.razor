@@ -1,6 +1,8 @@
 ﻿@page "/import-data"
 @using Core.Enums
 @using Core.Errors
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 
 <PageTitle>Импорт данных</PageTitle>
 
@@ -242,7 +244,7 @@
                         </MudItem>
                         <MudItem xs="12">
                             <MudText Typo="Typo.body2" Class="mt-2">
-                                Время выполнения: @importResult.ElapsedTimeMs миллисекунд
+                                Время выполнения: @(importResult.ElapsedTimeMs/1000) секунд
                             </MudText>
                         </MudItem>
                     }
