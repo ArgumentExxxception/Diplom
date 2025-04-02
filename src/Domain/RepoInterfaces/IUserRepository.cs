@@ -1,6 +1,6 @@
-﻿using Core.Entities;
+﻿using Domain.Entities;
 
-namespace Core.Repositories;
+namespace Domain.RepoInterfaces;
 
 public interface IUserRepository: IRepository<User>
 {

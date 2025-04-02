@@ -1,8 +1,8 @@
 ﻿@page "/backgroundCheck"
-@using Core.Enums
-@using Core.Models
+@inject IBackgroundTaskService BackgroundTaskService
+@using Core
 @using Core.Results
-@inject Core.IBackgroundTaskService BackgroundTaskService
+@using Domain.Enums
 @implements IDisposable
 
 <style>

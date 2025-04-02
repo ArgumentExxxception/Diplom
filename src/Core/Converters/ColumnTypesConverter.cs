@@ -1,8 +1,7 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Core.Enums;
+using Domain.Enums;
 
 public class ColumnTypesConverter : JsonConverter<ColumnTypes>
 {

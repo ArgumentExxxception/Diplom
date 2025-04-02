@@ -1,4 +1,4 @@
-﻿namespace Core;
+﻿namespace Domain.Services;
 
 public class SecurityService
 {

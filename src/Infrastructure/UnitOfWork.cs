@@ -1,5 +1,5 @@
 using Core;
-using Core.Repositories;
+using Domain.RepoInterfaces;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,9 +1,8 @@
 using System.Text;
 using Core;
-using Core.Enums;
 using Core.Models;
+using Domain.Enums;
 using Infrastructure.DTOs;
-using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure;
 

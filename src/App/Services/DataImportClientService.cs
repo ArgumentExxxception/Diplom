@@ -1,11 +1,9 @@
 ﻿using System.Net.Http.Headers;
-using System.Text.Json;
+using System.Text;
 using App.Interfaces;
-using Core.Enums;
 using Core.Models;
 using Core.Results;
 using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 
 namespace App.Services;
@@ -28,11 +26,11 @@ public class DataImportClientService: IDataImportClientService
 
             // Сериализуем данные о дубликатах в JSON
             var duplicatesJson = JsonConvert.SerializeObject(duplicates);
-            var duplicatesContent = new StringContent(duplicatesJson, System.Text.Encoding.UTF8, "application/json");
+            var duplicatesContent = new StringContent(duplicatesJson, Encoding.UTF8, "application/json");
             content.Add(duplicatesContent, "duplicates");
 
             // Добавляем имя таблицы в запрос
-            var tableNameContent = new StringContent(tableName, System.Text.Encoding.UTF8, "text/plain");
+            var tableNameContent = new StringContent(tableName, Encoding.UTF8, "text/plain");
             content.Add(tableNameContent, "tableName");
 
             // Отправляем запрос на сервер
@@ -71,7 +69,7 @@ public class DataImportClientService: IDataImportClientService
             
             // Сериализуем модель запроса в JSON
             var importRequestJson = JsonConvert.SerializeObject(importRequest);
-            var importRequestContent = new StringContent(importRequestJson, System.Text.Encoding.UTF8, "application/json");
+            var importRequestContent = new StringContent(importRequestJson, Encoding.UTF8, "application/json");
             content.Add(importRequestContent, "importRequest");
 
             // Отправляем запрос на сервер

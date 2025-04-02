@@ -1,7 +1,4 @@
-﻿using System.Security.AccessControl;
-using Core.Enums;
-
-namespace Core.Models;
+﻿namespace Core.Models;
 
 public class TableImportRequestModel
 {

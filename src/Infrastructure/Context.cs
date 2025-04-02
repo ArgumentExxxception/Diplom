@@ -1,4 +1,5 @@
-using Core.Entities;
+using System.Text.Json;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure;
@@ -25,8 +26,8 @@ public class Context: DbContext
             // Store roles as JSON
             entity.Property(e => e.Roles)
                 .HasConversion(
-                    v => System.Text.Json.JsonSerializer.Serialize(v, new System.Text.Json.JsonSerializerOptions()),
-                    v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, new System.Text.Json.JsonSerializerOptions()) ?? new List<string>()
+                    v => JsonSerializer.Serialize<List<string>>(v, new JsonSerializerOptions()),
+                    v => JsonSerializer.Deserialize<List<string>>(v, new JsonSerializerOptions()) ?? new List<string>()
                 );
         }).HasDefaultSchema("appschema");
         

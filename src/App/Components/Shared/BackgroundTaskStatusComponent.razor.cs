@@ -1,5 +1,5 @@
-﻿using Core.Enums;
-using Core.Models;
+﻿using Core.Models;
+using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 

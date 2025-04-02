@@ -1,5 +1,5 @@
-﻿using Core.Entities;
-using Core.Repositories;
+﻿using Domain.Entities;
+using Domain.RepoInterfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
@@ -32,32 +32,43 @@ public class RefreshTokenRepository: IRefreshTokenRepository
             .ToListAsync();
     }
 
-    /// <summary>
-    /// Добавить новый refresh токен
-    /// </summary>
-    public async Task Add(RefreshToken refreshToken)
+    public async Task<IEnumerable<RefreshToken>> GetAllAsync()
     {
-        await _context.RefreshTokens.AddAsync(refreshToken);
+        return await _context.RefreshTokens.ToListAsync();
     }
 
-    /// <summary>
-    /// Обновить существующий refresh токен
-    /// </summary>
-    public async Task Update(RefreshToken refreshToken)
+    public async Task<RefreshToken> GetByIdAsync(int id)
     {
-        _context.RefreshTokens.Update(refreshToken);
+        return await _context.RefreshTokens.FindAsync(id);
     }
 
-    /// <summary>
-    /// Удалить refresh токен по его ID
-    /// </summary>
-    public async Task Remove(int id)
+    public async Task<bool> Delete(int id)
     {
         var token = await _context.RefreshTokens.FindAsync(id);
         if (token != null)
         {
             _context.RefreshTokens.Remove(token);
+            return true;
         }
+        return false;
+    }
+
+    /// <summary>
+    /// Добавить новый refresh токен
+    /// </summary>
+    public async Task<bool> Add(RefreshToken refreshToken)
+    {
+        await _context.RefreshTokens.AddAsync(refreshToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Обновить существующий refresh токен
+    /// </summary>
+    public async Task<bool> Update(RefreshToken refreshToken)
+    {
+         _context.RefreshTokens.Update(refreshToken);
+        return true;
     }
 
     /// <summary>

@@ -1,10 +1,13 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Core;
 using Core.DTOs;
 using Core.Entities;
 using Core.Results;
+using Domain.Entities;
+using Domain.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
@@ -168,7 +171,7 @@ public class AuthService: IAuthService
         if (storedRefreshToken.Expires < DateTime.UtcNow)
         {
             // Удаляем просроченный токен
-            await _unitOfWork.RefreshTokens.Remove(storedRefreshToken.Id);
+            await _unitOfWork.RefreshTokens.Delete(storedRefreshToken.Id);
             await _unitOfWork.CommitAsync();
             
             response.Error = "Refresh token истек";
@@ -306,7 +309,7 @@ public class AuthService: IAuthService
     private string GenerateRefreshToken()
     {
         var randomNumber = new byte[32];
-        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+        using (var rng = RandomNumberGenerator.Create())
         {
             rng.GetBytes(randomNumber);
             return Convert.ToBase64String(randomNumber);

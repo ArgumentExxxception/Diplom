@@ -1,13 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
-using MudBlazor.Services;
 using App.Interfaces;
 using App.Services;
 using Blazored.LocalStorage;
 using Core;
 using Core.Logging;
-using Core.Validators;
-using FluentValidation;
 using FluentValidation.AspNetCore;
 using Infrastructure;
 using Infrastructure.Logging;
@@ -17,6 +14,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 
@@ -114,7 +112,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
 }); 
 builder.Services.AddFluentValidationClientsideAdapters();
-builder.Services.AddValidatorsFromAssemblyContaining<LoginModelValidator>();
 builder.Services.AddScoped<IBackgroundTaskService, BackgroundTaskService>();
 builder.Services.AddHostedService<BackgroundTaskCleanupService>();
 

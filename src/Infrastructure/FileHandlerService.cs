@@ -1,17 +1,15 @@
-﻿using System.Data;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Xml;
 using Core;
-using Core.Enums;
 using Core.Errors;
-using Core.Logging;
 using Core.Models;
 using Core.Results;
 using CsvHelper;
 using CsvHelper.Configuration;
+using Domain.Enums;
 
 namespace Infrastructure;
 
