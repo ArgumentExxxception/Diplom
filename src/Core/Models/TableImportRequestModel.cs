@@ -25,6 +25,8 @@ public class TableImportRequestModel
     public string XmlRowElement { get; set; }
     
     public int SkipRows { get; set; }
+
+    public string UserEmail { get; set; }
     
     
 

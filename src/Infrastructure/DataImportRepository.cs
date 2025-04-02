@@ -18,16 +18,18 @@ public class DataImportRepository: IDataImportRepository
         _databaseService = databaseService;
     }
     
-    public async Task UpdateDuplicatedRows(string tableName, List<Dictionary<string, object>> newDataList, List<string> primaryKeys, Dictionary<string, object> duplicateRow)
+    public async Task UpdateDuplicatedRows(string tableName, List<Dictionary<string, object>> newDataList,
+        List<string> primaryKeys, Dictionary<string, object> duplicateRow, CancellationToken cancellationToken)
     {
         // Открываем транзакцию
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
             // Проходим по каждому элементу в списке новых данных
             foreach (var newData in newDataList)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 // Формируем SET часть запроса
                 var setClause = string.Join(", ", newData
                     .Where(kv => !primaryKeys.Contains(kv.Key)) // Исключаем первичные ключи из обновления
@@ -59,22 +61,23 @@ public class DataImportRepository: IDataImportRepository
             }
 
             // Фиксируем транзакцию
-            await transaction.CommitAsync();
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (Exception ex)
         {
             // Откатываем транзакцию в случае ошибки
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
             throw new InvalidOperationException("Ошибка при обновлении дубликатов. Транзакция откачена.", ex);
         }
     }
 
-    public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema)
+    public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema, CancellationToken cancellationToken = default)
     {
         if (rows.Count == 0)
             return;
-
-        using var transaction = await _dbContext.Database.BeginTransactionAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        
+        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             List<TableModel> tables = await _databaseService.GetPublicTablesAsync();
@@ -112,6 +115,7 @@ public class DataImportRepository: IDataImportRepository
             List<object> parameters = new List<object>();
             for (int i = 0; i < rows.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (i > 0)
                     insertSql.Append(", ");
 
@@ -135,27 +139,29 @@ public class DataImportRepository: IDataImportRepository
 
             // Выполняем запрос
             await _dbContext.Database.ExecuteSqlRawAsync(insertSql.ToString(), parameters.ToArray());
-            await transaction.CommitAsync();
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
             throw new Exception($"Ошибка при импорте данных в таблицу {tableName}: {ex.Message}", ex);
         }
     }
 
-    public async Task ClearTableAsync(string tableName)
+    public async Task ClearTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var sql = $"DELETE FROM \"{tableName}\"";
-        await _dbContext.Database.ExecuteSqlRawAsync(sql);
+        await _dbContext.Database.ExecuteSqlRawAsync(sql,cancellationToken);
     }
     
-    public async Task<List<Dictionary<string, object>>> GetExistingDataAsync(string tableName)
+    public async Task<List<Dictionary<string, object>>> GetExistingDataAsync(string tableName, CancellationToken cancellationToken = default)
     {
         var existingData = new List<Dictionary<string, object>>();
         
         var columns = await _databaseService.GetColumnInfoAsync(tableName);
-
+        cancellationToken.ThrowIfCancellationRequested();
+        
         if (!columns.Any())
         {
             throw new InvalidOperationException($"Таблица '{tableName}' не найдена или не содержит столбцов.");
@@ -170,11 +176,11 @@ public class DataImportRepository: IDataImportRepository
         command.CommandText = query;
         if (_dbContext.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
         {
-            await _dbContext.Database.OpenConnectionAsync();
+            await _dbContext.Database.OpenConnectionAsync(cancellationToken);
         }
 
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
         {
             var rowData = new Dictionary<string, object>();
 

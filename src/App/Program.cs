@@ -50,18 +50,20 @@ builder.Services.AddEntityFrameworkNpgsql().AddDbContext<Context>
     opt.UseNpgsql(c => c.MigrationsAssembly("Infrastructure"));
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DbConnection"));
 });
+builder.Services.AddScoped<IFileHandlerService, FileHandlerService>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IDatabaseService, DatabaseService>();
 builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
 builder.Services.AddScoped<IDataImportClientService, DataImportClientService>();
-builder.Services.AddScoped<IFileHandlerService, FileHandlerService>();
 builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
 builder.Services.AddScoped<IDataImportRepository, DataImportRepository>();
 builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
+builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<IAuthClientService,AuthClientService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
+builder.Services.AddBlazoredLocalStorage();
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = long.MaxValue;
@@ -110,10 +112,11 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
     options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
-});
-builder.Services.AddBlazoredLocalStorage(); 
+}); 
 builder.Services.AddFluentValidationClientsideAdapters();
 builder.Services.AddValidatorsFromAssemblyContaining<LoginModelValidator>();
+builder.Services.AddScoped<IBackgroundTaskService, BackgroundTaskService>();
+builder.Services.AddHostedService<BackgroundTaskCleanupService>();
 
 
 var app = builder.Build();

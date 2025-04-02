@@ -12,8 +12,12 @@ namespace Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.EnsureSchema(
+                name: "appschema");
+
             migrationBuilder.CreateTable(
                 name: "Users",
+                schema: "appschema",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -34,6 +38,7 @@ namespace Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "RefreshTokens",
+                schema: "appschema",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -55,6 +60,7 @@ namespace Infrastructure.Migrations
                     table.ForeignKey(
                         name: "FK_RefreshTokens_Users_UserId",
                         column: x => x.UserId,
+                        principalSchema: "appschema",
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -62,6 +68,7 @@ namespace Infrastructure.Migrations
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefreshTokens_UserId",
+                schema: "appschema",
                 table: "RefreshTokens",
                 column: "UserId");
         }
@@ -70,10 +77,12 @@ namespace Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "RefreshTokens");
+                name: "RefreshTokens",
+                schema: "appschema");
 
             migrationBuilder.DropTable(
-                name: "Users");
+                name: "Users",
+                schema: "appschema");
         }
     }
 }
