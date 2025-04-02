@@ -1,8 +1,8 @@
 ﻿using System.Data;
 using System.Text;
 using Core;
-using Core.Enums;
 using Core.Models;
+using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure;
@@ -174,7 +174,7 @@ public class DataImportRepository: IDataImportRepository
         // Выполняем запрос
         await using var command = _dbContext.Database.GetDbConnection().CreateCommand();
         command.CommandText = query;
-        if (_dbContext.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
+        if (_dbContext.Database.GetDbConnection().State != ConnectionState.Open)
         {
             await _dbContext.Database.OpenConnectionAsync(cancellationToken);
         }

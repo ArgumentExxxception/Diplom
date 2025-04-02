@@ -1,6 +1,3 @@
-using System.Text.Json.Serialization;
-using Core.Enums;
-
 namespace Core.Models;
 
 public class ColumnInfo

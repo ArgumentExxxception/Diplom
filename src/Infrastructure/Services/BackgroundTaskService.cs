@@ -1,7 +1,6 @@
 ﻿using Core;
-using Core.Enums;
-using Core.Logging;
 using Core.Models;
+using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Services;

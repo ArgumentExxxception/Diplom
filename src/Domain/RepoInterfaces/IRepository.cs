@@ -1,4 +1,4 @@
-namespace Core;
+﻿namespace Domain.RepoInterfaces;
 
 public interface IRepository<T> where T : class
 {
