@@ -1,0 +1,96 @@
+﻿<MudDialog DisableSidePadding="true" ClassContent="px-0">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Class="px-4 pt-2">
+            @(Progress.IsCompleted ? "Импорт завершен" : "Импорт данных")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="pb-4 px-4">
+            @if (!Progress.IsCompleted)
+            {
+                <MudText Class="mb-2">@Progress.CurrentOperation</MudText>
+                <MudProgressLinear Color="Color.Primary" Value="@Progress.ProgressPercentage" Class="mb-3" />
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText>Обработано строк:</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>@Progress.ProcessedRows из @(Progress.TotalRows > 0 ? Progress.TotalRows : "?")</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>Импортировано:</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>@Progress.ImportedRows</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>Пропущено:</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>@Progress.SkippedRows</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>Ошибок:</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText>@Progress.ErrorRows</MudText>
+                    </MudItem>
+                </MudGrid>
+            }
+            else
+            {
+                @if (Progress.HasError)
+                {
+                    <MudAlert Severity="Severity.Error" Class="mb-3">
+                        <MudText>@Progress.ErrorMessage</MudText>
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Class="mb-3">
+                        <MudText>Импорт успешно завершен!</MudText>
+                    </MudAlert>
+                }
+
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Class="pa-4 mud-theme-primary">
+                            <MudText Typo="Typo.h6" Class="mb-2">Обработано строк</MudText>
+                            <MudText Typo="Typo.h4">@Progress.ProcessedRows</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Class="pa-4 mud-theme-secondary">
+                            <MudText Typo="Typo.h6" Class="mb-2">Импортировано</MudText>
+                            <MudText Typo="Typo.h4">@Progress.ImportedRows</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Class="pa-4 mud-theme-default">
+                            <MudText Typo="Typo.h6" Class="mb-2">Пропущено</MudText>
+                            <MudText Typo="Typo.h4">@Progress.SkippedRows</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="12">
+                        <MudPaper Class="pa-4 mud-theme-error">
+                            <MudText Typo="Typo.h6" Class="mb-2">Ошибок</MudText>
+                            <MudText Typo="Typo.h4">@Progress.ErrorRows</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            }
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        @if (Progress.IsCompleted)
+        {
+            <MudButton OnClick="CloseDialog" Color="Color.Primary">Закрыть</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="CancelImport" Color="Color.Error" Disabled="@IsCancellationRequested">
+                @(IsCancellationRequested ? "Отмена..." : "Отменить импорт")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>

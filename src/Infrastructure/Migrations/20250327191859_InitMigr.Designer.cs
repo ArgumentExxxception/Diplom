@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(Context))]
-    [Migration("20250326191650_InitMigr")]
+    [Migration("20250327191859_InitMigr")]
     partial class InitMigr
     {
         /// <inheritdoc />
@@ -20,6 +20,7 @@ namespace Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasDefaultSchema("appschema")
                 .HasAnnotation("ProductVersion", "9.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -77,7 +78,7 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", "appschema");
                 });
 
             modelBuilder.Entity("Core.Entities.User", b =>
@@ -121,7 +122,7 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", "appschema");
                 });
 
             modelBuilder.Entity("Core.Entities.RefreshToken", b =>

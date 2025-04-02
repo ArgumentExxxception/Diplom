@@ -1,4 +1,10 @@
-﻿@inherits LayoutComponentBase
+﻿@using global::App.Interfaces
+@using global::App.Services
+@inherits LayoutComponentBase
+@inject IAuthClientService _authClientService
+@inject ISnackbar _Snackbar
+@inject NavigationManager _NavigationManager
+@inject AuthenticationStateProvider _authenticationStateProvider
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -10,6 +16,26 @@
         <MudText Typo="Typo.h5" Class="ml-3">Application</MudText>
         <MudSpacer />
         <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
+        @if (_isAuthenticated)
+        {
+            <MudButton 
+                StartIcon="@Icons.Material.Filled.Logout" 
+                Color="Color.Inherit" 
+                OnClick="Logout" 
+                Class="ml-2">
+                Выйти
+            </MudButton>
+        }
+        else
+        {
+            <MudButton 
+                StartIcon="@Icons.Material.Filled.Login" 
+                Color="Color.Inherit"
+                Href="/login" 
+                Class="ml-2">
+                Войти
+            </MudButton>
+        }
         <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
     </MudAppBar>
     <MudDrawer id="nav-drawer" @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -31,6 +57,7 @@
     private bool _drawerOpen = true;
     private bool _isDarkMode = true;
     private MudTheme? _theme = null;
+    private bool _isAuthenticated = false;
 
     protected override void OnInitialized()
     {
@@ -42,6 +69,30 @@
             PaletteDark = _darkPalette,
             LayoutProperties = new LayoutProperties()
         };
+    }
+
+    protected async override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var authState = await ((CustomAuthStateProvider)_authenticationStateProvider).GetAuthenticationStateAsync();
+            _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Logout()
+    {
+        try
+        {
+            await _authClientService.Logout();
+            _Snackbar.Add("Вы успешно вышли из системы", Severity.Success);
+            _NavigationManager.NavigateTo("/", true);
+        }
+        catch (Exception ex)
+        {
+            _Snackbar.Add($"Ошибка при выходе из системы: {ex.Message}", Severity.Error);
+        }
     }
 
     private void DrawerToggle()

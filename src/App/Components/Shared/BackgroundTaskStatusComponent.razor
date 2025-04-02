@@ -1,0 +1,113 @@
+﻿@page "/backgroundCheck"
+@using Core.Enums
+@using Core.Models
+@using Core.Results
+@inject Core.IBackgroundTaskService BackgroundTaskService
+@implements IDisposable
+
+<style>
+    .background-tasks-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 350px;
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .task-card {
+        border-radius: 4px;
+        transition: all 0.3s ease;
+    }
+
+    .task-collapsed {
+        max-height: 64px;
+        overflow: hidden;
+    }
+
+    .task-expanded {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .mini-button {
+        min-width: 36px;
+        padding: 3px;
+    }
+</style>
+
+<div class="background-tasks-container">
+    @if (activeTasks.Count > 0)
+    {
+        @foreach (var task in activeTasks)
+        {
+            <MudPaper
+                      Elevation="3">
+                <div class="d-flex align-center justify-space-between mb-1">
+                    <MudText Typo="Typo.subtitle1" Class="d-flex align-center">
+                        <MudIcon Icon="@GetTaskIcon(task)" Color="GetTaskColor(task)"></MudIcon>
+                        <span class="ml-2">@task.Name</span>
+                    </MudText>
+                    <div class="d-flex">
+                        <MudIconButton Icon="@(expandedTaskIds.Contains(task.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                       Size="Size.Small"
+                                       Class="mini-button mr-1"
+                                       OnClick="() => ToggleTaskExpand(task.Id)" />
+
+                        @if (task.Status == BackgroundTaskStatus.Running || task.Status == BackgroundTaskStatus.Pending)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                           Size="Size.Small"
+                                           Class="mini-button"
+                                           Color="Color.Error"
+                                           OnClick="() => CancelTask(task.Id)" />
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Class="mini-button"
+                                           OnClick="() => DismissTask(task.Id)" />
+                        }
+                    </div>
+                </div>
+
+                <MudProgressLinear Color="@GetTaskColor(task)"
+                                   Value="@task.Progress"
+                                   Class="my-1"
+                                   Striped="@(task.Status == BackgroundTaskStatus.Running)"
+                                   Indeterminate="@(task.Status == BackgroundTaskStatus.Pending)" />
+
+                <MudText Typo="Typo.caption" Class="d-flex justify-space-between align-center">
+                    <span>@GetTaskStatusText(task)</span>
+                    <span>@FormatDuration(task)</span>
+                </MudText>
+
+                @if (expandedTaskIds.Contains(task.Id))
+                {
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.body2">@task.Description</MudText>
+
+                    @if (!string.IsNullOrEmpty(task.ErrorMessage))
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@task.ErrorMessage</MudAlert>
+                    }
+
+                    @if (task.Result is ImportResult importResult)
+                    {
+                        <div class="mt-2">
+                            <MudText Typo="Typo.caption">Processed: @importResult.RowsProcessed rows</MudText>
+                            <MudText Typo="Typo.caption">Inserted: @importResult.RowsInserted rows</MudText>
+                            <MudText Typo="Typo.caption">Updated: @importResult.RowsUpdated rows</MudText>
+                            <MudText Typo="Typo.caption">Errors: @importResult.ErrorCount</MudText>
+                        </div>
+                    }
+                }
+            </MudPaper>
+        }
+    }
+</div>

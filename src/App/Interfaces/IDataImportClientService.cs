@@ -7,6 +7,6 @@ namespace App.Interfaces;
 
 public interface IDataImportClientService
 {
-    Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest);
+    Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest,CancellationToken cancellationToken = default);
     Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates);
 }

@@ -51,14 +51,14 @@ public class FileController: ControllerBase
     [ProducesResponseType(typeof(ImportResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<ImportResult>> ImportData()
+    public async Task<ActionResult<ImportResult>> ImportData(CancellationToken cancellationToken)
     {
         if (!Request.HasFormContentType)
         {
             return BadRequest("Ожидается multipart/form-data запрос");
         }
 
-        var form = await Request.ReadFormAsync();
+        var form = await Request.ReadFormAsync(cancellationToken);
     
         // Получение и проверка файла
         var file = form.Files.GetFile("file");
@@ -95,9 +95,6 @@ public class FileController: ControllerBase
             // _logger.LogError(ex, "Ошибка при разборе JSON параметров импорта");
             // return BadRequest($"Некорректный формат параметров импорта: {ex.Message}");
         }
-        
-        // Получение информации о пользователе
-        var userName = User.Identity?.Name ?? "System";
 
         // Засекаем время начала операции
         var startTime = DateTime.Now;
@@ -108,8 +105,8 @@ public class FileController: ControllerBase
             stream, 
             file.FileName, 
             file.ContentType,
-            importRequestModel, 
-            userName);
+            importRequestModel,
+            cancellationToken);
         
         // Добавляем в результат информацию о времени выполнения
         // result.ElapsedTimeMs = (DateTime.Now - startTime).TotalMilliseconds;

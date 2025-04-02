@@ -28,7 +28,7 @@ public class Context: DbContext
                     v => System.Text.Json.JsonSerializer.Serialize(v, new System.Text.Json.JsonSerializerOptions()),
                     v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, new System.Text.Json.JsonSerializerOptions()) ?? new List<string>()
                 );
-        });
+        }).HasDefaultSchema("appschema");
         
         modelBuilder.Entity<RefreshToken>(entity =>
         {
@@ -46,6 +46,6 @@ public class Context: DbContext
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
-        });
+        }).HasDefaultSchema("appschema");
     }
 }

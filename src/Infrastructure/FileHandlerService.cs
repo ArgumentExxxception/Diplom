@@ -19,19 +19,21 @@ public class FileHandlerService: IFileHandlerService
 {
     private readonly IDataImportRepository _dataImportRepository;
     private readonly IDatabaseService _databaseService;
+    private readonly IUnitOfWork _unitOfWork;
     // private readonly IAppLogger<FileHandlerService> _logger;
     
     private const string MODIFIED_DATE_COLUMN = "lastmodifiedon";
     private const string MODIFIED_BY_COLUMN = "lastmodifiedby";
     
-    public FileHandlerService(IDataImportRepository dataImportRepository, IDatabaseService databaseService)
+    public FileHandlerService(IDataImportRepository dataImportRepository, IDatabaseService databaseService, IUnitOfWork unitOfWork)
     {
         _dataImportRepository = dataImportRepository;
         _databaseService = databaseService;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<ImportResult> ImportDataAsync(Stream stream, string fileName, string contentType,
-        TableImportRequestModel importRequest, string userName)
+        TableImportRequestModel importRequest, CancellationToken cancellationToken)
     {
         if (stream == null) 
             throw new ArgumentNullException(nameof(stream));
@@ -42,9 +44,17 @@ public class FileHandlerService: IFileHandlerService
         if (importRequest == null) 
             throw new ArgumentNullException(nameof(importRequest));
         
-        if (string.IsNullOrEmpty(userName)) 
-            userName = "System"; 
+        if (string.IsNullOrEmpty(importRequest.UserEmail))
+            throw new UnauthorizedAccessException("Зарегистрируйтесь или авторизуйтесь! Доступ запрещен.");
+
+        var user = await _unitOfWork.Users.GetByEmailAsync(importRequest.UserEmail);
+        string userEmail = string.Empty;
         
+        if (user == null)
+            throw new UnauthorizedAccessException($"Пользователь с почтой {importRequest.UserEmail} не найден в базе!");
+        else
+            userEmail = user.Username;
+
         var stopwatch = Stopwatch.StartNew();
         var result = new ImportResult
         {
@@ -59,12 +69,13 @@ public class FileHandlerService: IFileHandlerService
             // _logger.LogInformation(
             //     "Начало процесса импорта. Файл: {FileName}, Таблица: {TableName}, Пользователь: {UserName}",
             //     fileName, importRequest.TableName, userName);
+            cancellationToken.ThrowIfCancellationRequested();
             
             if (IsXMLFile(fileName, contentType))
-                await ProcessXMLFileAsync(stream, importRequest, userName, result);
+                await ProcessXMLFileAsync(stream, importRequest, userEmail, result, cancellationToken);
             
             else if (IsCSVFile(fileName, contentType))
-                await ProcessCSVFileAsync(stream, importRequest, userName, result);
+                await ProcessCSVFileAsync(stream, importRequest, userEmail, result);
             
             else
                 throw new FormatException(
@@ -196,11 +207,14 @@ public class FileHandlerService: IFileHandlerService
         Stream fileStream,
         TableImportRequestModel importRequest,
         string userName,
-        ImportResult result)
+        ImportResult result,
+        CancellationToken cancellationToken)
     {
         try
         {
             List<Dictionary<string,object>> existingData = new List<Dictionary<string, object>>();
+            
+            cancellationToken.ThrowIfCancellationRequested();
             
             if ((ImportMode)importRequest.ImportMode == ImportMode.Replace)
             {
@@ -217,7 +231,8 @@ public class FileHandlerService: IFileHandlerService
             {
                 Async = true,
                 IgnoreWhitespace = true,
-                IgnoreComments = true
+                IgnoreComments = true,
+                CloseInput = false,
             };
 
             // Определяем корневой элемент и элемент строки
@@ -278,6 +293,7 @@ public class FileHandlerService: IFileHandlerService
                     // Читаем содержимое элемента строки до его закрывающего тега
                     while (await reader.ReadAsync())
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         // Если вышли за пределы элемента строки, то закончили его обработку
                         if (reader.Depth <= rowDepth && reader.NodeType == XmlNodeType.EndElement)
                         {

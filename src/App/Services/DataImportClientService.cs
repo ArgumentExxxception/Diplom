@@ -55,16 +55,17 @@ public class DataImportClientService: IDataImportClientService
         }
     }
 
-    public async Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest)
+    public async Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest, CancellationToken cancellationToken = default)
     {
         try
         {
             // Создаем контейнер для multipart/form-data
             using var content = new MultipartFormDataContent();
-
-            // Добавляем файл
-            // var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024)); // Ограничение на 50 МБ
-            var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 1024)); // Ограничение на 50 МБ
+            
+            var fileStream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 1024);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            
+            var fileContent = new StreamContent(fileStream);
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
             content.Add(fileContent, "file", file.Name);
             
@@ -74,14 +75,14 @@ public class DataImportClientService: IDataImportClientService
             content.Add(importRequestContent, "importRequest");
 
             // Отправляем запрос на сервер
-            var responseMessage = await _httpClient.PostAsync("/api/File/import", content);
+            var responseMessage = await _httpClient.PostAsync("/api/File/import", content,cancellationToken);
             
             if (!responseMessage.IsSuccessStatusCode)
             {
-                var error = await responseMessage.Content.ReadAsStringAsync();
+                var error = await responseMessage.Content.ReadAsStringAsync(cancellationToken);
                 throw new Exception($"Ошибка при импорте: {responseMessage.StatusCode}, {error}");
             }
-            var importResult = await responseMessage.Content.ReadFromJsonAsync<ImportResult>();
+            var importResult = await responseMessage.Content.ReadFromJsonAsync<ImportResult>(cancellationToken);
             return importResult;
         }
         catch (Exception e)

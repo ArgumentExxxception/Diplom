@@ -1,9 +1,14 @@
-﻿using App.Components.Dialogs;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using App.Components.Dialogs;
 using App.Interfaces;
+using Blazored.LocalStorage;
+using Core;
 using Core.Enums;
 using Core.Models;
 using Core.Results;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using MudBlazor;
 
@@ -17,6 +22,11 @@ public partial class ImportDataPage : ComponentBase
     [Inject] private IDatabaseClientService _databaseService { get; set; }
     [Inject] private IDataImportClientService _dataImportClientService { get; set; }
     [Inject] private ISnackbar Snackbar { get; set; }
+    [Inject] private IBackgroundTaskService _backgroundTaskService { get; set; }
+    [Inject] private AuthenticationStateProvider _authStateProvider { get; set; }
+    [Inject] private ILocalStorageService _localStorage { get; set; }
+    
+    private const long BACKGROUND_PROCESSING_THRESHOLD = 25 * 1024 * 1024;
     
     private MudTabs _tabs;
     private List<TableModel> _tabels = new();
@@ -42,10 +52,21 @@ public partial class ImportDataPage : ComponentBase
     private IBrowserFile selectedFile;
     private bool isImporting = false;
     private ImportResult importResult;
+    private string? _currentUserEmail = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAvailableTables();
+        var authState = await _authStateProvider.GetAuthenticationStateAsync();
+        var token = await _localStorage.GetItemAsync<string>("authToken");
+        _currentUserEmail = GetEmailFromToken(token);
+        
+    }
+    private string GetEmailFromToken(string token)
+    {
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(token);
+        return jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
     }
 
     private async Task LoadAvailableTables()
@@ -115,94 +136,119 @@ public partial class ImportDataPage : ComponentBase
     
         if (result.Canceled)
             return;
-    
         try
         {
             isImporting = true;
             StateHasChanged();
-    
-            // // Загрузка структуры таблицы, если еще не загружена
-            // if (tableStructure.Count == 0)
-            // {
-            //     await LoadTableStructure(selectedTable);
-            // }
-    
-            // Формирование запроса на импорт
-            using var content = new MultipartFormDataContent();
-            TableImportRequestModel importRequest = new TableImportRequestModel();
-            //
-            // // Добавление файла
-            // using var fileContent = new StreamContent(selectedFile.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024)); // 50 МБ максимум
-            // content.Add(fileContent, "file", selectedFile.Name);
-
-            if (_activePanelIndex == 0)
-            {
-                // Добавление параметров импорта
-                importRequest = new TableImportRequestModel
-                {
-                    TableName = selectedTable,
-                    Columns = tableStructure,
-                    ImportMode = importMode,
-                    IsNewTable = isNewTable,
-                    XmlRootElement = xmlRootElement,
-                    XmlRowElement = xmlRowElement,
-                    HasHeaderRow = true
-                };
-            }
-            else if (_activePanelIndex == 1)
-            {
-                if (string.IsNullOrWhiteSpace(_tableName))
-                {
-                    Snackbar.Add("Введите название таблицы.", Severity.Warning);
-                    return;
-                }
-
-                if (columns.Count == 0)
-                {
-                    Snackbar.Add("Добавьте хотя бы одну колонку.", Severity.Warning);
-                    return;
-                }
-                importRequest = new TableImportRequestModel
-                {
-                    TableName = _tableName,
-                    Columns = columns,
-                    ImportMode = 1,
-                    IsNewTable = isNewTable,
-                    XmlRootElement = xmlRootElement,
-                    XmlRowElement = xmlRowElement,
-                    HasHeaderRow = true
-                };
-            }
-
-
-            // Отправка запроса
-            importResult = await _dataImportClientService.ImportData(selectedFile,importRequest);
             
-            if (importResult.Success)
+            TableImportRequestModel importRequest = BuildImportRequestModel();
+            
+            if (selectedFile?.Size > BACKGROUND_PROCESSING_THRESHOLD)
             {
-                if (importResult.Success)
-                {
-                    _snackbar.Add("Импорт данных успешно завершен", Severity.Success);
-                    if (importResult.DuplicatedRows is { Count: > 0 })
-                    {
-                        await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows);
-                    }
-                }
+                await StartBackgroundImport(importRequest);
             }
             else
             {
-                // var errorContent = await response.Content.ReadAsStringAsync();
-                // _snackbar.Add($"Ошибка сервера: {errorContent}", Severity.Error);
+                importResult = await _dataImportClientService.ImportData(selectedFile,importRequest);
+                if (importResult.Success)
+                {
+                    if (importResult.Success)
+                    {
+                        _snackbar.Add("Импорт данных успешно завершен", Severity.Success);
+                        if (importResult.DuplicatedRows is { Count: > 0 })
+                        {
+                            await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows);
+                        }
+                    }
+                }
             }
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            _snackbar.Add($"Ошибка: {ex.Message}", Severity.Error);
+            Console.WriteLine(e);
+            throw;
         }
         finally
         {
             isImporting = false;
             StateHasChanged();
+        }
+    }
+    
+    private TableImportRequestModel BuildImportRequestModel()
+    {
+        if (_activePanelIndex == 0)
+        {
+            // Import to existing table
+            return new TableImportRequestModel
+            {
+                TableName = selectedTable,
+                Columns = tableStructure,
+                ImportMode = importMode,
+                IsNewTable = isNewTable,
+                XmlRootElement = xmlRootElement,
+                XmlRowElement = xmlRowElement,
+                HasHeaderRow = true,
+                UserEmail = _currentUserEmail,
+            };
+        }
+        else
+        {
+            // Import to new table
+            if (string.IsNullOrWhiteSpace(_tableName))
+            {
+                Snackbar.Add("Введите название таблицы.", Severity.Warning);
+                throw new Exception("Table name is required");
+            }
+
+            if (columns.Count == 0)
+            {
+                Snackbar.Add("Добавьте хотя бы одну колонку.", Severity.Warning);
+                throw new Exception("At least one column is required");
+            }
+            
+            return new TableImportRequestModel
+            {
+                TableName = _tableName,
+                Columns = columns,
+                ImportMode = 1,
+                IsNewTable = isNewTable,
+                XmlRootElement = xmlRootElement,
+                XmlRowElement = xmlRowElement,
+                HasHeaderRow = true,
+                UserEmail = _currentUserEmail,
+            };
+        }
+    }
+    
+    private async Task StartBackgroundImport(TableImportRequestModel importRequest)
+    {
+        try
+        {
+            // Create a memory stream from the selected file
+            using var stream = selectedFile.OpenReadStream(maxAllowedSize: 500 * 1024 * 1024); // 500 MB max
+            
+            // Inform the user that the import will be processed in the background
+            _snackbar.Add($"The file is larger than 25 MB. Processing in the background.", Severity.Info);
+            
+            // Enqueue the background task
+            var task = await _backgroundTaskService.EnqueueImportTaskAsync(
+                selectedFile.Name,
+                selectedFile.Size,
+                importRequest,
+                stream,
+                selectedFile.ContentType,
+                "user"); // Replace with actual user identity
+            
+            // Reset the file selection to allow starting new imports
+            selectedFile = null;
+            
+            _snackbar.Add($"Background import started. You can track progress in the bottom right corner.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _snackbar.Add($"Failed to start background import: {ex.Message}", Severity.Error);
+            throw;
         }
     }
 

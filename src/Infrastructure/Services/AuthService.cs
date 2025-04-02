@@ -26,7 +26,7 @@ public class AuthService: IAuthService
     {
         var response = new LoginResponse { Successful = false };
 
-        var user = await _unitOfWork.Users.GetByUsernameAsync(loginRequest.Username);
+        var user = await _unitOfWork.Users.GetByEmailAsync(loginRequest.Username);
         if (user == null)
         {
             response.Error = "Пользователь не найден";
