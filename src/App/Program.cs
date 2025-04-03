@@ -4,21 +4,20 @@ using App.Interfaces;
 using App.Services;
 using Blazored.LocalStorage;
 using Core;
-using Core.Logging;
 using FluentValidation.AspNetCore;
 using Infrastructure;
-using Infrastructure.Logging;
-using Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddCore();
+builder.Services.AddInfrastructureServices(builder.Configuration);
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Debug() // Минимальный уровень логирования — Debug
@@ -42,24 +41,12 @@ builder.Services.AddMudServices();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri("http://localhost:5024/") });
-builder.Services.AddEntityFrameworkNpgsql().AddDbContext<Context>
-(opt =>
-{
-    opt.UseNpgsql(c => c.MigrationsAssembly("Infrastructure"));
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("DbConnection"));
-});
-builder.Services.AddScoped<IFileHandlerService, FileHandlerService>();
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddControllers();
-builder.Services.AddScoped<IDatabaseService, DatabaseService>();
 builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
 builder.Services.AddScoped<IDataImportClientService, DataImportClientService>();
 builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
-builder.Services.AddScoped<IDataImportRepository, DataImportRepository>();
-builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
 builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<IAuthClientService,AuthClientService>();
-builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 builder.Services.AddBlazoredLocalStorage();
 builder.Services.Configure<FormOptions>(options =>
@@ -112,8 +99,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
 }); 
 builder.Services.AddFluentValidationClientsideAdapters();
-builder.Services.AddScoped<IBackgroundTaskService, BackgroundTaskService>();
-builder.Services.AddHostedService<BackgroundTaskCleanupService>();
 
 
 var app = builder.Build();

@@ -1,11 +1,10 @@
-﻿using Core;
+using Core;
 using Core.DTOs;
 using Core.Entities;
 using Core.Results;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 
-namespace App.Controllers;
+namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
