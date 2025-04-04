@@ -67,6 +67,7 @@
                 <MudText Typo="Typo.h4" Class="mb-4">Создание новой таблицы</MudText>
 
                 <MudTextField @bind-Value="_tableName" Label="Название таблицы" Variant="Variant.Outlined" Class="mb-4" />
+                <MudTextField @bind-Value="_newTableComment" Label="Комментарий к таблице" Variant="Variant.Outlined" Class="mb-4" />
 
                 <MudPaper Elevation="25" Class="pa-4 mb-4">
                     <MudText Typo="Typo.h6" Class="mb-3">Добавить колонку</MudText>
@@ -93,6 +94,14 @@
                         <MudCheckBox T="bool" @bind-Value="_newColumnIsRequired" Label="Обязательное поле" />
                     </MudItem>
 
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox T="bool" @bind-Value="_newColumnSearchInDuplicates" Label="Использовать поле при поиске дубликатов" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox T="bool" @bind-Value="_NewColumnIsGeoTag" Label="Столбец является геометкой" />
+                    </MudItem>
+
                     <MudButton OnClick="AddColumn" Color="Color.Primary" Class="mt-3">Добавить колонку</MudButton>
                 </MudPaper>
 
@@ -107,6 +116,8 @@
                                 <MudTh>Тип данных</MudTh>
                                 <MudTh>Первичный ключ</MudTh>
                                 <MudTh>Обязательное поле</MudTh>
+                                <MudTh>Геометка</MudTh>
+                                <MudTh>Используется при поиске дубликатов</MudTh>
                                 <MudTh>Действия</MudTh>
                             </HeaderContent>
                             <RowTemplate>
@@ -114,6 +125,8 @@
                                 <MudTd>@context.Type</MudTd>
                                 <MudTd>@context.IsPrimaryKey</MudTd>
                                 <MudTd>@context.IsRequired</MudTd>
+                                <MudTd>@context.IsGeoTag</MudTd>
+                                <MudTd>@context.SearchInDuplicates</MudTd>
                                 <MudTd>
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="() => RemoveColumn(context)" Color="Color.Error" Size="Size.Small" />
                                 </MudTd>

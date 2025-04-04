@@ -1,9 +1,12 @@
-﻿using System.Net.Http.Json;
+﻿using System.Net.Http.Headers;
 using App.Interfaces;
 using Blazored.LocalStorage;
+using Core.Commands;
 using Core.DTOs;
 using Core.Entities;
+using Core.Queries;
 using Core.Results;
+using MediatR;
 using Microsoft.AspNetCore.Components.Authorization;
 
 namespace App.Services;
@@ -51,28 +54,22 @@ public class AuthClientService : IAuthClientService
         return await response.Content.ReadFromJsonAsync<LoginResponse>();
     }
 
-    /// <summary>
-    /// Выполняет выход пользователя
-    /// </summary>
     public async Task Logout()
     {
-        // Опционально вызов сервера для инвалидации токена
         var token = await _localStorage.GetItemAsync<string>("authToken");
         if (!string.IsNullOrEmpty(token))
         {
+            // Добавляем токен в заголовок запроса
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             await _httpClient.PostAsync("api/auth/logout", null);
         }
-        
+
         await _localStorage.RemoveItemAsync("authToken");
         await _localStorage.RemoveItemAsync("refreshToken");
-        
         ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
-        _httpClient.DefaultRequestHeaders.Authorization = null;
     }
 
-    /// <summary>
-    /// Обновляет истекший токен с помощью refresh токена
-    /// </summary>
+    
     public async Task<LoginResponse> RefreshToken()
     {
         try
@@ -81,11 +78,9 @@ public class AuthClientService : IAuthClientService
             var refreshToken = await _localStorage.GetItemAsync<string>("refreshToken");
 
             if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(refreshToken))
-            {
                 return new LoginResponse { Successful = false, Error = "Отсутствуют токены" };
-            }
 
-            var refreshRequest = new RefreshTokenRequestDto()
+            var refreshRequest = new RefreshTokenRequestDto
             {
                 Token = token,
                 RefreshToken = refreshToken
@@ -99,11 +94,6 @@ public class AuthClientService : IAuthClientService
                 await _localStorage.SetItemAsync("authToken", result.Token);
                 await _localStorage.SetItemAsync("refreshToken", result.RefreshToken);
                 ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(result.Token);
-            }
-            else
-            {
-                // Если обновление не удалось, выполняем выход
-                await Logout();
             }
 
             return result;

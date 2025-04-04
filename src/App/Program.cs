@@ -36,11 +36,15 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 // Add MudBlazor services
 builder.Services.AddMudServices();
+builder.Services.AddScoped(sp => 
+    new HttpClient 
+    { 
+        BaseAddress = new Uri("http://localhost:5056")
+    });
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri("http://localhost:5024/") });
 builder.Services.AddControllers();
 builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
 builder.Services.AddScoped<IDataImportClientService, DataImportClientService>();

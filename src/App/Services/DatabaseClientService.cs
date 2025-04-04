@@ -1,4 +1,3 @@
-using System.Text.Json;
 using App.Interfaces;
 using Core.Models;
 
@@ -17,13 +16,20 @@ public class DatabaseClientService : IDatabaseClientService
     {
         try
         {
-            var tables = await _httpClient.GetFromJsonAsync<List<TableModel>>("api/Tabels/public");
-            return tables;
+            var response = await _httpClient.GetAsync("http://localhost:5056/api/Tables/public");
+        
+            if (!response.IsSuccessStatusCode)
+            {
+                return new List<TableModel>();
+            }
+        
+            return await response.Content.ReadFromJsonAsync<List<TableModel>>() ?? new List<TableModel>();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
-            Console.WriteLine($"Error fetching public tables: {ex.Message}");
-            throw;
+            // Логирование ошибки
+            Console.WriteLine($"Ошибка при получении публичных таблиц: {ex.Message}");
+            return new List<TableModel>();
         }
     }
     
@@ -31,32 +37,20 @@ public class DatabaseClientService : IDatabaseClientService
     {
         try
         {
-            var options = new JsonSerializerOptions
+            var response = await _httpClient.PostAsJsonAsync("api/Tables/create", tableModel);
+        
+            if (response.IsSuccessStatusCode)
             {
-                WriteIndented = true
-            };
-            var json = JsonSerializer.Serialize(tableModel, options);
-            var response = await _httpClient.PostAsJsonAsync(
-                "api/Tabels/create", 
-                tableModel);
-
-            return await HandleResponse(response);
+                return await response.Content.ReadAsStringAsync();
+            }
+        
+            // Чтение сообщения об ошибке из ответа
+            var errorMessage = await response.Content.ReadAsStringAsync();
+            return $"Ошибка: {errorMessage}";
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
-            Console.WriteLine($"Error fetching public tables: {ex.Message}");
-            throw;
+            return $"Ошибка при создании таблицы: {ex.Message}";
         }
-    }
-    
-    private async Task<string> HandleResponse(HttpResponseMessage response)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            return await response.Content.ReadAsStringAsync();
-        }
-            
-        var error = await response.Content.ReadAsStringAsync();
-        return $"Error ({response.StatusCode}): {error}";
     }
 }

@@ -140,6 +140,11 @@ public class DatabaseService: IDatabaseService
 
         query.Length -= 2;
         query.Append(");");
+        
+        if (!string.IsNullOrWhiteSpace(tableModel.TableComment))
+        {
+            query.Append($" COMMENT ON TABLE {EscapeIdentifier(tableModel.TableName)} IS '{tableModel.TableComment}';");
+        }
 
         try
         {

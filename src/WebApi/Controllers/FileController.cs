@@ -37,7 +37,7 @@ public class FileController: ControllerBase
             if (duplicatesDictionary is null || duplicatesDictionary.Count == 0)
                 throw new JsonException("Не удалось десериализовать дубликаты");
 
-            await _fileHandlerService.UpdateDublicates(tableName, duplicatesDictionary);
+            // await _fileHandlerService.UpdateDublicates(tableName, duplicatesDictionary);
 
             // Возвращаем успешный ответ
             return Ok(new { Message = "Дубликаты успешно обработаны", TableName = tableName });

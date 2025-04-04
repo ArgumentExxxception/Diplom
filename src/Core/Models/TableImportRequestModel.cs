@@ -24,6 +24,7 @@ public class TableImportRequestModel
     public int SkipRows { get; set; }
 
     public string UserEmail { get; set; }
+    public string TableComment { get; set; }
     
     
 

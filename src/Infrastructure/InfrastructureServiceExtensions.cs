@@ -1,5 +1,6 @@
 using Core;
 using Core.Logging;
+using Core.ServiceInterfaces;
 using Domain.RepoInterfaces;
 using Infrastructure.Logging;
 using Infrastructure.Repositories;
@@ -34,6 +35,9 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IDataImportRepository, DataImportRepository>();
 
         services.AddScoped<IFileHandlerService, FileHandlerService>();
+
+        services.AddScoped<IXmlImportService, XmlImportService>();
+        services.AddScoped<ICsvImportService, CsvImportService>();
 
         return services;
     }

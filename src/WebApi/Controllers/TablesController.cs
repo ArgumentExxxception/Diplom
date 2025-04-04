@@ -1,5 +1,7 @@
-using Core;
+using Core.Commands;
 using Core.Models;
+using Core.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace WebApi.Controllers;
@@ -8,17 +10,17 @@ namespace WebApi.Controllers;
 [Route("api/[controller]")]
 public class TabelsController: ControllerBase
 {
-    private readonly IDatabaseService _databaseService;
+    private readonly IMediator _mediator;
 
-    public TabelsController(IDatabaseService databaseService)
+    public TabelsController(IMediator mediator)
     {
-        _databaseService = databaseService;
+        _mediator = mediator;
     }
     
     [HttpGet("public")]
     public async Task<ActionResult<List<TableModel>>> GetPublicTables()
     {
-        var tables = await _databaseService.GetPublicTablesAsync();
+        var tables = await _mediator.Send(new GetPublicTablesQuery());
         return Ok(tables);
     }
     
@@ -27,13 +29,8 @@ public class TabelsController: ControllerBase
     {
         try
         {
-            if (request == null || string.IsNullOrEmpty(request.TableName))
-            {
-                return BadRequest("Некорректные данные.");
-            }
-            
-            await _databaseService.CreateTableAsync(request);
-            return Ok("Таблица успешно создана.");
+            var result = await _mediator.Send(new CreateTableCommand(request));
+            return Ok(result);
         }
         catch (Exception ex)
         {

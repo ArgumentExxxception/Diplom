@@ -38,8 +38,11 @@ public partial class ImportDataPage : ComponentBase
     private int _newColumnType = 0;
     private bool _newColumnIsPrimaryKey = false;
     private bool _newColumnIsRequired = true;
+    private bool _newColumnSearchInDuplicates = false;
+    private bool _NewColumnIsGeoTag = false;
     private List<ColumnInfo> columns = new();
     private bool isNewTable = false;
+    private string _newTableComment = string.Empty;
     
     private string xmlRootElement = string.Empty;
     private string xmlRowElement = string.Empty;
@@ -216,6 +219,7 @@ public partial class ImportDataPage : ComponentBase
                 XmlRowElement = xmlRowElement,
                 HasHeaderRow = true,
                 UserEmail = _currentUserEmail,
+                TableComment = _newTableComment
             };
         }
     }
@@ -293,13 +297,17 @@ public partial class ImportDataPage : ComponentBase
             Name = _newColumnName,
             Type = _newColumnType,
             IsRequired = _newColumnIsRequired,
-            IsPrimaryKey = _newColumnIsPrimaryKey
+            IsPrimaryKey = _newColumnIsPrimaryKey,
+            SearchInDuplicates = _newColumnSearchInDuplicates,
+            IsGeoTag = _NewColumnIsGeoTag
         });
         
         _newColumnName = string.Empty;
         _newColumnType = 0;
         _newColumnIsPrimaryKey = false;
         _newColumnIsRequired = false;
+        _newColumnSearchInDuplicates = false;
+        _NewColumnIsGeoTag = false;
     }
     
     private void RemoveColumn(ColumnInfo column)

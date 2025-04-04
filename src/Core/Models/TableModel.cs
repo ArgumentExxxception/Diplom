@@ -8,4 +8,5 @@ public class TableModel
     public List<ColumnInfo> Columns { get; set; } = [];
     public List<string> TableData { get; set; } = [];
     public string PrimaryKey { get; set; }
+    public string TableComment { get; set; }
 }

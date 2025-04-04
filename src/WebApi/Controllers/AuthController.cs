@@ -1,7 +1,9 @@
-using Core;
+using Core.Commands;
 using Core.DTOs;
 using Core.Entities;
+using Core.Queries;
 using Core.Results;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace WebApi.Controllers;
@@ -10,53 +12,40 @@ namespace WebApi.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly IAuthService _authService;
+    private readonly IMediator _mediator;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IMediator mediator)
     {
-        _authService = authService;
+        _mediator = mediator;
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequestDto loginRequest)
     {
-        var result = await _authService.LoginAsync(loginRequest);
-
-        if (result.Successful)
-            return Ok(result);
-            
-        return Unauthorized(result);
+        var result = await _mediator.Send(new LoginQuery(loginRequest.Username, loginRequest.Password, loginRequest.RememberMe));
+        return result.Successful ? Ok(result) : Unauthorized(result);
     }
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto registerRequest)
     {
-        var result = await _authService.RegisterAsync(registerRequest);
-
-        if (result.Successful)
-            return Ok(result);
-            
-        return BadRequest(result);
+        var result = await _mediator.Send(new RegisterCommand(registerRequest));
+        return result.Successful ? Ok(result) : BadRequest(result);
     }
 
-    [HttpPost("refresh-token")]
-    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshRequest)
-    {
-        var result = await _authService.RefreshTokenAsync(refreshRequest.Token, refreshRequest.RefreshToken);
-
-        if (result.Successful)
-            return Ok(result);
-            
-        return Unauthorized(result);
-    }
 
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
         var token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-            
-        await _authService.LogoutAsync(token);
-            
+        await _mediator.Send(new LogoutQuery(token));
         return Ok();
+    }
+    
+    [HttpPost("refresh-token")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshRequest)
+    {
+        var result = await _mediator.Send(new RefreshTokenQuery(refreshRequest.Token, refreshRequest.RefreshToken));
+        return result.Successful ? Ok(result) : Unauthorized(result);
     }
 }
