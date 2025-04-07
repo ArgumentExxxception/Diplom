@@ -55,6 +55,7 @@ public partial class ImportDataPage : ComponentBase
     private bool isImporting = false;
     private ImportResult importResult;
     private string? _currentUserEmail = string.Empty;
+    private string? _selectedTableComment = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,10 +89,13 @@ public partial class ImportDataPage : ComponentBase
     {
         try
         {
-            tableStructure = _tabels
-                .Where(tableModel => tableModel.TableName == tableName)
-                .SelectMany(table => table.Columns)
-                .ToList();
+            var tableModel = _tabels
+                .Where(tableModel => tableModel.TableName == tableName).FirstOrDefault();
+            if (tableModel != null)
+            {
+                tableStructure = tableModel.Columns.ToList();
+                _selectedTableComment = tableModel.TableComment;
+            }
         }
         catch (Exception ex)
         {
@@ -145,22 +149,15 @@ public partial class ImportDataPage : ComponentBase
             
             TableImportRequestModel importRequest = BuildImportRequestModel();
             
-            if (selectedFile?.Size > BACKGROUND_PROCESSING_THRESHOLD)
+            importResult = await _dataImportClientService.ImportData(selectedFile,importRequest);
+            if (importResult.Success)
             {
-                await StartBackgroundImport(importRequest);
-            }
-            else
-            {
-                importResult = await _dataImportClientService.ImportData(selectedFile,importRequest);
                 if (importResult.Success)
                 {
-                    if (importResult.Success)
+                    _snackbar.Add("Импорт данных успешно завершен", Severity.Success);
+                    if (importResult.DuplicatedRows is { Count: > 0 })
                     {
-                        _snackbar.Add("Импорт данных успешно завершен", Severity.Success);
-                        if (importResult.DuplicatedRows is { Count: > 0 })
-                        {
-                            await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows);
-                        }
+                        await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows);
                     }
                 }
             }
@@ -221,37 +218,6 @@ public partial class ImportDataPage : ComponentBase
                 UserEmail = _currentUserEmail,
                 TableComment = _newTableComment
             };
-        }
-    }
-    
-    private async Task StartBackgroundImport(TableImportRequestModel importRequest)
-    {
-        try
-        {
-            // Create a memory stream from the selected file
-            using var stream = selectedFile.OpenReadStream(maxAllowedSize: 500 * 1024 * 1024); // 500 MB max
-            
-            // Inform the user that the import will be processed in the background
-            _snackbar.Add($"The file is larger than 25 MB. Processing in the background.", Severity.Info);
-            
-            // Enqueue the background task
-            var task = await _backgroundTaskService.EnqueueImportTaskAsync(
-                selectedFile.Name,
-                selectedFile.Size,
-                importRequest,
-                stream,
-                selectedFile.ContentType,
-                "user"); // Replace with actual user identity
-            
-            // Reset the file selection to allow starting new imports
-            selectedFile = null;
-            
-            _snackbar.Add($"Background import started. You can track progress in the bottom right corner.", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            _snackbar.Add($"Failed to start background import: {ex.Message}", Severity.Error);
-            throw;
         }
     }
 

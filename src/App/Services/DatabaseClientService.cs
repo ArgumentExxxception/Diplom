@@ -16,7 +16,7 @@ public class DatabaseClientService : IDatabaseClientService
     {
         try
         {
-            var response = await _httpClient.GetAsync("http://localhost:5056/api/Tables/public");
+            var response = await _httpClient.GetAsync("api/tables/public");
         
             if (!response.IsSuccessStatusCode)
             {
@@ -37,7 +37,7 @@ public class DatabaseClientService : IDatabaseClientService
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("api/Tables/create", tableModel);
+            var response = await _httpClient.PostAsJsonAsync("api/tables/create", tableModel);
         
             if (response.IsSuccessStatusCode)
             {

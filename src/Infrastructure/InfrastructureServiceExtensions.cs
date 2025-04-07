@@ -22,7 +22,7 @@ public static class InfrastructureServiceExtensions
             opt.UseNpgsql(configuration.GetConnectionString("DbConnection"));
         });
         services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IBackgroundTaskService, BackgroundTaskService>();
+        services.AddSingleton<IBackgroundTaskService, BackgroundTaskService>();
         services.AddHostedService<BackgroundTaskCleanupService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         

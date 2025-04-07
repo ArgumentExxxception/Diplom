@@ -8,11 +8,11 @@ namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class TabelsController: ControllerBase
+public class TablesController: ControllerBase
 {
     private readonly IMediator _mediator;
 
-    public TabelsController(IMediator mediator)
+    public TablesController(IMediator mediator)
     {
         _mediator = mediator;
     }

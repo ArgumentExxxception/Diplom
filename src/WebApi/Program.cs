@@ -31,11 +31,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseSwagger();
-app.UseSwaggerUI();
-app.UseAuthorization();
-app.MapControllers();
 app.UseRouting();
 app.UseCors("AllowBlazor");
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
 
 app.Run();

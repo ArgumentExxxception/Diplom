@@ -1,5 +1,6 @@
 ﻿@page "/import-data"
 @using Core.Errors
+@using Domain.Enums
 @using Microsoft.AspNetCore.Authorization
 @rendermode InteractiveServer
 @attribute [Authorize]
@@ -29,6 +30,9 @@
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_selectedTableComment" ReadOnly="true" Label="Комментарий к таблице" Variant="Variant.Outlined" Class="mb-4" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
                             <MudSelect T="int" Label="Режим импорта" @bind-Value="importMode" Required="true"
                                        HelperText="Выберите режим импорта данных"
                                        AdornmentIcon="@Icons.Material.Filled.MergeType" AdornmentColor="Color.Primary">
@@ -47,12 +51,20 @@
                                         <MudTh>Имя колонки</MudTh>
                                         <MudTh>Тип данных</MudTh>
                                         <MudTh>Обязательное</MudTh>
+                                        <MudTh>Используется при поиске дубликатов</MudTh>
+                                        <MudTh>Географическая метка</MudTh>
                                     </HeaderContent>
                                     <RowTemplate>
                                         <MudTd DataLabel="Имя колонки">@context.Name</MudTd>
-                                        <MudTd DataLabel="Тип данных">@context.Type</MudTd>
+                                        <MudTd DataLabel="Тип данных">@((ColumnTypes)context.Type)</MudTd>
                                         <MudTd DataLabel="Обязательное">
-                                            <MudCheckBox T="bool" @bind-Checked="context.IsRequired" Color="Color.Primary" />
+                                            <MudCheckBox T="bool" ReadOnly="true" @bind-Checked="context.IsRequired" Color="Color.Primary" />
+                                        </MudTd>
+                                        <MudTd DataLabel="Обязательное">
+                                            <MudCheckBox T="bool" ReadOnly="true" @bind-Checked="context.SearchInDuplicates" Color="Color.Primary" />
+                                        </MudTd>
+                                        <MudTd DataLabel="Обязательное">
+                                            <MudCheckBox T="bool" ReadOnly="true" @bind-Checked="context.IsGeoTag" Color="Color.Primary" />
                                         </MudTd>
                                     </RowTemplate>
                                 </MudTable>
@@ -296,4 +308,5 @@
             </MudCardContent>
         </MudCard>
     }
+    <BackgroundTasksStatusComponent></BackgroundTasksStatusComponent>
 </MudContainer>

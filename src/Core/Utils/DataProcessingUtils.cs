@@ -6,8 +6,8 @@ namespace Core.Utils;
 
 public static class DataProcessingUtils
 {
-    public const string MODIFIED_BY_COLUMN = "ModifiedBy";
-    public const string MODIFIED_DATE_COLUMN = "ModifiedDate";
+    public const string MODIFIED_BY_COLUMN = "lastmodifiedby";
+    public const string MODIFIED_DATE_COLUMN = "lastmodifiedon";
     
         
     public static bool IsDuplicate(

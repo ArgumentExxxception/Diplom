@@ -14,16 +14,18 @@ namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+// [Authorize]
 public class FileController: ControllerBase
 {
     private IMediator _mediator { get; set; }
+    private IBackgroundTaskService _backgroundTaskService { get; set; }
     private IFileHandlerService _fileHandlerService { get; set; }
     
-    public FileController(IFileHandlerService fileHandlerService, IMediator mediator)
+    public FileController(IFileHandlerService fileHandlerService, IMediator mediator, IBackgroundTaskService backgroundTaskService)
     {
         _fileHandlerService = fileHandlerService;
         _mediator = mediator;
+        _backgroundTaskService = backgroundTaskService;
     }
 
     [HttpPost("update-duplicates")]
@@ -55,42 +57,50 @@ public class FileController: ControllerBase
     [ProducesResponseType(typeof(ImportResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<ImportResult>> ImportData(CancellationToken cancellationToken)
+    public async Task<ActionResult<ImportResult>> ImportData([FromForm] IFormFile file, 
+        [FromForm] string importRequestJson, 
+        CancellationToken cancellationToken)
     {
-        if (!Request.HasFormContentType)
-        {
-            return BadRequest("Ожидается multipart/form-data запрос");
-        }
-
-        var form = await Request.ReadFormAsync(cancellationToken);
-        var file = form.Files.GetFile("file");
         if (file == null || file.Length == 0)
         {
             return BadRequest("Файл не был предоставлен или пуст");
-        }
-
-        if (!form.TryGetValue("importRequest", out var importRequestValues) || importRequestValues.Count == 0)
-        {
-            return BadRequest("Параметры импорта не были предоставлены");
         }
 
         TableImportRequestModel importRequest;
         try
         {
             importRequest = JsonSerializer.Deserialize<TableImportRequestModel>(
-                                importRequestValues.ToString(), 
-                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? 
-                            throw new JsonException();
+                importRequestJson, 
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new JsonException();
         }
         catch (JsonException)
         {
             return BadRequest("Некорректные параметры импорта");
         }
 
-        using var stream = file.OpenReadStream();
-        var command = new ImportDataCommand(stream, file.FileName, file.ContentType, importRequest);
-        var result = await _mediator.Send(command, cancellationToken);
+        // Если файл большой, запускаем фоновую задачу
+        if (file.Length > 50 * 1024 * 1024)
+        {
+            using var stream = file.OpenReadStream();
+            // Можно использовать BackgroundTaskService для запуска фоновой задачи
+            var task = await _backgroundTaskService.EnqueueImportTaskAsync(
+                file.FileName,
+                file.Length,
+                importRequest,
+                stream,
+                file.ContentType,
+                User.Identity?.Name ?? "unknown");
 
-        return Ok(result);
+            // Возвращаем информацию о запущенной задаче
+            return Accepted(new { Message = "Импорт запущен в фоне", TaskId = task.Id });
+        }
+        else
+        {
+            // Для небольших файлов выполняем синхронный импорт через команду
+            using var stream = file.OpenReadStream();
+            var command = new ImportDataCommand(stream, file.FileName, file.ContentType, importRequest);
+            var result = await _mediator.Send(command, cancellationToken);
+            return Ok(result);
+        }
     }
 }

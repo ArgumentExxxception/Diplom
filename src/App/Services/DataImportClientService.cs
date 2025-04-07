@@ -101,45 +101,35 @@ public class DataImportClientService: IDataImportClientService
     //     return await response.Content.ReadFromJsonAsync<ImportResult>(_jsonOptions, cancellationToken) 
     //            ?? throw new JsonException("Не удалось десериализовать ответ");
     // }
-       public async Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest, CancellationToken cancellationToken = default)
+    public async Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest, CancellationToken cancellationToken = default)
     {
         try
         {
-            var content = new MultipartFormDataContent();
+            using var content = new MultipartFormDataContent();
 
-            // Добавляем файл в запрос
-            var fileContent = new StreamContent(file.OpenReadStream(10_000_000)); // Ограничение на размер
-            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            // Добавляем файл
+            var fileContent = new StreamContent(file.OpenReadStream(long.MaxValue));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
             content.Add(fileContent, "file", file.Name);
 
-            // Добавляем JSON с параметрами импорта
-            var importRequestJson = JsonContent.Create(importRequest);
-            content.Add(importRequestJson, "importRequest");
+            // Сериализуем importRequest и добавляем как строку с именем "importRequestJson"
+            var importRequestJson = System.Text.Json.JsonSerializer.Serialize(importRequest);
+            content.Add(new StringContent(importRequestJson, Encoding.UTF8, "application/json"), "importRequestJson");
 
-            // Отправляем запрос
-            var response = await _httpClient.PostAsync("api/import", content, cancellationToken);
+            var response = await _httpClient.PostAsync("api/File/import", content, cancellationToken);
 
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                return await response.Content.ReadFromJsonAsync<ImportResult>();
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync();
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
                 throw new Exception($"Ошибка импорта: {error}");
             }
+
+            return await response.Content.ReadFromJsonAsync<ImportResult>(cancellationToken: cancellationToken);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Console.WriteLine(e);
+            Console.WriteLine($"Ошибка при импорте: {ex.Message}");
             throw;
-            // _logger.LogError(ex, "Ошибка при импорте данных");
-            // return new ImportResult 
-            // { 
-            //     Success = false, 
-            //     Message = $"Ошибка: {ex.Message}",
-            //     TableName = tableName
-            // };
         }
     }
 }

@@ -1,5 +1,6 @@
 using System.Text;
 using Core;
+using Core.DTOs;
 using Core.Models;
 using Domain.Enums;
 using Infrastructure.DTOs;
@@ -17,26 +18,37 @@ public class DatabaseService: IDatabaseService
     {
         // Запрос для получения списка публичных таблиц
         var query = @"
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public';";
+    SELECT 
+        t.table_name as table_name,
+        d.description as table_comment
+    FROM 
+        information_schema.tables t
+    LEFT JOIN 
+        pg_catalog.pg_class c ON c.relname = t.table_name
+    LEFT JOIN 
+        pg_catalog.pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.table_schema
+    LEFT JOIN 
+        pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+    WHERE 
+        t.table_schema = 'public';";
 
         // Выполняем запрос и получаем список имен таблиц
-        var tableNames = await _unitOfWork.ExecuteQueryAsync<string>(query);
+        var tableNames = await _unitOfWork.ExecuteQueryAsync<TableInfoDto>(query);
 
         // Создаем список TableModel для каждой таблицы
         var tables = new List<TableModel>();
 
-        foreach (string tableName in tableNames)
+        foreach (var tableInfo in tableNames)
         {
-            List<ColumnInfo> columnInfos = await GetColumnInfoAsync(tableName);
+            List<ColumnInfo> columnInfos = await GetColumnInfoAsync(tableInfo.TableName);
             // Создаем TableModel
             var tableModel = new TableModel
             {
-                TableName = tableName,
+                TableName = tableInfo.TableName,
                 Columns = columnInfos,
                 TableData = new List<string>(), // Можно добавить логику для получения данных таблицы
-                PrimaryKey = "" // Можно добавить логику для определения первичного ключа
+                PrimaryKey = "",
+                TableComment = tableInfo.TableComment ?? string.Empty
             };
 
             tables.Add(tableModel);
