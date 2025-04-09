@@ -1,5 +1,9 @@
 using Core;
+using Core.Logging;
+using FluentValidation.AspNetCore;
 using Infrastructure;
+using Infrastructure.Logging;
+using WebApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,14 +25,16 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader());
 });
+builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
+builder.Services.AddFluentValidationAutoValidation();
 var app = builder.Build();
 
+app.UseExceptionHandling();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
-
 app.UseHttpsRedirection();
 
 app.UseRouting();

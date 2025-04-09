@@ -1,25 +1,23 @@
 ﻿using App.Interfaces;
 using App.Services;
-using Blazored.FluentValidation;
 using Core.Entities;
-using Core.Models;
+using Core.Validators;
 using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
 using MudBlazor;
 
 namespace App.Components.Pages;
 
 public partial class Login: ComponentBase
 {
-    
     [Inject] private IAuthClientService AuthService { get; set; }
     [Inject] private NavigationManager NavigationManager { get; set; }
     [Inject] private ISnackbar Snackbar { get; set; }
+    [Inject] private ErrorHandlingService ErrorHandler { get; set; }
 
     private LoginRequestDto loginModel = new LoginRequestDto();
     private bool loading = false;
     private string error = string.Empty;
-    private bool formValid = false;
+    private LoginRequestValidator _validator = new LoginRequestValidator();
 
     private async Task HandleLogin()
     {
@@ -38,13 +36,13 @@ public partial class Login: ComponentBase
             else
             {
                 error = result.Error;
-                Snackbar.Add(error, Severity.Error);
+                ErrorHandler.ShowErrorMessage(error);
             }
         }
         catch (Exception ex)
         {
-            error = "Произошла ошибка при входе: " + ex.Message;
-            Snackbar.Add(error, Severity.Error);
+            error = "Произошла ошибка при входе";
+            ErrorHandler.HandleException(ex);
         }
         finally
         {

@@ -53,6 +53,7 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<IAuthClientService,AuthClientService>();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 builder.Services.AddBlazoredLocalStorage();
+builder.Services.AddScoped<ErrorHandlingService>();
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = long.MaxValue;

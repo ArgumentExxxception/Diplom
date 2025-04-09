@@ -1,4 +1,7 @@
 ﻿@page "/login"
+@using Severity = MudBlazor.Severity
+@inherits ComponentBase
+
 <MudCard Elevation="25" Class="pa-4" Style="max-width: 500px; margin: 0 auto;">
     <MudCardHeader>
         <CardHeaderContent>
@@ -6,12 +9,15 @@
         </CardHeaderContent>
     </MudCardHeader>
     <MudCardContent>
-        <MudForm @bind-IsValid="@formValid">
+        <EditForm Model="@loginModel" OnValidSubmit="HandleLogin" Context="formContext">
+            <FluentValidationValidator Validator="@_validator" />
+
             <MudTextField T="string"
                           Label="Имя пользователя"
                           Required="true"
                           RequiredError="Имя пользователя обязательно"
                           @bind-Value="loginModel.Username" />
+            <ValidationMessage For="@(() => loginModel.Username)" />
 
             <MudTextField T="string"
                           Label="Пароль"
@@ -19,6 +25,7 @@
                           RequiredError="Пароль обязателен"
                           InputType="InputType.Password"
                           @bind-Value="loginModel.Password" />
+            <ValidationMessage For="@(() => loginModel.Password)" />
 
             <MudCheckBox @bind-Value="@loginModel.RememberMe"
                          Label="Запомнить меня"
@@ -28,26 +35,27 @@
             {
                 <MudAlert Severity="Severity.Error" Class="mt-3 mb-3">@error</MudAlert>
             }
-        </MudForm>
+
+            <div class="mt-4">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Disabled="@(loading)"
+                           ButtonType="ButtonType.Submit"
+                           FullWidth="true"
+                           Size="Size.Large">
+                    @if (loading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Вход...</span>
+                    }
+                    else
+                    {
+                        <span>Войти</span>
+                    }
+                </MudButton>
+            </div>
+        </EditForm>
     </MudCardContent>
-    <MudCardActions>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   Disabled="@(!formValid && loading)"
-                   OnClick="HandleLogin"
-                   FullWidth="true"
-                   Size="Size.Large">
-            @if (loading)
-            {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                <span>Вход...</span>
-            }
-            else
-            {
-                <span>Войти</span>
-            }
-        </MudButton>
-    </MudCardActions>
     <MudCardActions>
         <MudButton Variant="Variant.Text"
                    Href="/register"

@@ -1,0 +1,10 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+
+<CascadingValue Value="this">
+    @ChildContent
+
+    @if (CurrentException != null)
+    {
+        @ErrorContent
+    }
+</CascadingValue>

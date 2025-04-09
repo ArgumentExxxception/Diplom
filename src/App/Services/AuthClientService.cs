@@ -11,20 +11,18 @@ using Microsoft.AspNetCore.Components.Authorization;
 
 namespace App.Services;
 
-public class AuthClientService : IAuthClientService
+public class AuthClientService : HttpClientBase ,IAuthClientService
 {
-    private readonly HttpClient _httpClient;
     private readonly AuthenticationStateProvider _authStateProvider;
-    private readonly ILocalStorageService _localStorage;
 
     public AuthClientService(
         HttpClient httpClient,
         AuthenticationStateProvider authStateProvider,
-        ILocalStorageService localStorage)
+        ILocalStorageService localStorage,
+        ErrorHandlingService errorHandler)
+        : base(httpClient, localStorage, errorHandler)
     {
-        _httpClient = httpClient;
         _authStateProvider = authStateProvider;
-        _localStorage = localStorage;
     }
 
     /// <summary>
@@ -32,17 +30,24 @@ public class AuthClientService : IAuthClientService
     /// </summary>
     public async Task<LoginResponse> Login(LoginRequestDto loginRequest)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/auth/login", loginRequest);
-        var loginResult = await response.Content.ReadFromJsonAsync<LoginResponse>();
-
-        if (loginResult.Successful)
+        try
         {
-            await _localStorage.SetItemAsync("authToken", loginResult.Token);
-            await _localStorage.SetItemAsync("refreshToken", loginResult.RefreshToken);
-            ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(loginResult.Token);
+            var response = await PostAsync<LoginResponse>("api/auth/login", loginRequest);
+            
+            if (response.Successful)
+            {
+                await _localStorage.SetItemAsync("authToken", response.Token);
+                await _localStorage.SetItemAsync("refreshToken", response.RefreshToken);
+                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(response.Token);
+            }
+            
+            return response;
         }
-
-        return loginResult;
+        catch (Exception)
+        {
+            // Ошибка уже обработана в базовом классе HttpClientBase
+            return new LoginResponse { Successful = false, Error = "Не удалось выполнить вход" };
+        }
     }
 
     /// <summary>
@@ -50,26 +55,48 @@ public class AuthClientService : IAuthClientService
     /// </summary>
     public async Task<LoginResponse> Register(RegisterRequestDto registerRequest)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/auth/register", registerRequest);
-        return await response.Content.ReadFromJsonAsync<LoginResponse>();
+        try
+        {
+            var response = await PostAsync<LoginResponse>("api/auth/register", registerRequest);
+            
+            if (response.Successful)
+            {
+                await _localStorage.SetItemAsync("authToken", response.Token);
+                await _localStorage.SetItemAsync("refreshToken", response.RefreshToken);
+                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(response.Token);
+            }
+            
+            return response;
+        }
+        catch (Exception)
+        {
+            // Ошибка уже обработана в базовом классе HttpClientBase
+            return new LoginResponse { Successful = false, Error = "Не удалось выполнить регистрацию" };
+        }
     }
-
+    /// <summary>
+    /// Выполняет выход пользователя
+    /// </summary>
     public async Task Logout()
     {
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        if (!string.IsNullOrEmpty(token))
+        try
         {
-            // Добавляем токен в заголовок запроса
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            await _httpClient.PostAsync("api/auth/logout", null);
+            await PostAsync("api/auth/logout");
+            await _localStorage.RemoveItemAsync("authToken");
+            await _localStorage.RemoveItemAsync("refreshToken");
+            ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
         }
-
-        await _localStorage.RemoveItemAsync("authToken");
-        await _localStorage.RemoveItemAsync("refreshToken");
-        ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
+        catch (Exception)
+        {
+            // Даже в случае ошибки, мы все равно удаляем токены и выходим из системы
+            await _localStorage.RemoveItemAsync("authToken");
+            await _localStorage.RemoveItemAsync("refreshToken");
+            ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
+        }
     }
 
-    
+    /// Обновляет токен
+    /// </summary>
     public async Task<LoginResponse> RefreshToken()
     {
         try
@@ -86,21 +113,21 @@ public class AuthClientService : IAuthClientService
                 RefreshToken = refreshToken
             };
 
-            var response = await _httpClient.PostAsJsonAsync("api/auth/refresh-token", refreshRequest);
-            var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
-
-            if (result.Successful)
+            var response = await PostAsync<LoginResponse>("api/auth/refresh-token", refreshRequest);
+            
+            if (response.Successful)
             {
-                await _localStorage.SetItemAsync("authToken", result.Token);
-                await _localStorage.SetItemAsync("refreshToken", result.RefreshToken);
-                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(result.Token);
+                await _localStorage.SetItemAsync("authToken", response.Token);
+                await _localStorage.SetItemAsync("refreshToken", response.RefreshToken);
+                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(response.Token);
             }
 
-            return result;
+            return response;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return new LoginResponse { Successful = false, Error = $"Ошибка при обновлении токена: {ex.Message}" };
+            // Ошибка уже обработана в базовом классе HttpClientBase
+            return new LoginResponse { Successful = false, Error = "Не удалось обновить токен" };
         }
     }
 

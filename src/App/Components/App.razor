@@ -13,9 +13,31 @@
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <App.Components.Shared.ErrorBoundary>
+        <ChildContent>
+            <Routes @rendermode="InteractiveServer" />
+        </ChildContent>
+        <ErrorContent Context="exception">
+            <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8">
+                <MudPaper Elevation="3" Class="pa-4">
+                    <MudText Typo="Typo.h5" Class="mb-4 mud-error-text">Ошибка в приложении</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-4">Произошла непредвиденная ошибка. Мы уже работаем над её устранением.</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4">Детали ошибки: @exception.Message</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => NavigationManager.NavigateTo(homePage,true)">
+                        Вернуться на главную
+                    </MudButton>
+                </MudPaper>
+            </MudContainer>
+        </ErrorContent>
+    </App.Components.Shared.ErrorBoundary>
     <script src="_framework/blazor.web.js"></script>
     <script src=@Assets["_content/MudBlazor/MudBlazor.min.js"]></script>
 </body>
 
 </html>
+
+@code
+{
+    [Inject] private NavigationManager NavigationManager { get; set; }
+    private string homePage = "/";
+}

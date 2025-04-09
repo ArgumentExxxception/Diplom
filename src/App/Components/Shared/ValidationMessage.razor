@@ -1,0 +1,39 @@
+﻿@using Microsoft.AspNetCore.Components.Forms
+@inherits ComponentBase
+
+<div class="validation-message">
+    @foreach (var message in ValidationMessages)
+    {
+        <MudText Color="Color.Error" Typo="Typo.caption">@message</MudText>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private EditContext CurrentEditContext { get; set; }
+
+    [Parameter] public string For { get; set; }
+
+    private IEnumerable<string> ValidationMessages => CurrentEditContext?.GetValidationMessages(FieldIdentifier).ToArray() ?? Array.Empty<string>();
+
+    private FieldIdentifier FieldIdentifier => string.IsNullOrEmpty(For) || CurrentEditContext?.Model == null
+        ? default
+        : new FieldIdentifier(CurrentEditContext.Model, For);
+
+    protected override void OnInitialized()
+    {
+        if (CurrentEditContext == null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ValidationMessage)} требует наличия {nameof(EditForm)} в дереве компонентов.");
+        }
+
+        CurrentEditContext.OnValidationStateChanged += (sender, args) => StateHasChanged();
+    }
+}
+
+<style>
+    .validation-message {
+        margin-top: 4px;
+        min-height: 20px;
+    }
+</style>
