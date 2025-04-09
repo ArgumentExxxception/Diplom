@@ -3,6 +3,7 @@ using Core.Logging;
 using Core.ServiceInterfaces;
 using Domain.RepoInterfaces;
 using Infrastructure.Logging;
+using Infrastructure.Mappers;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -26,12 +27,13 @@ public static class InfrastructureServiceExtensions
         services.AddHostedService<BackgroundTaskCleanupService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         
+        services.AddAutoMapper(typeof(MappingProfile).Assembly);
         services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
         services.AddScoped<IDatabaseService, DatabaseService>();
         
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
-        
+        services.AddScoped<IBackgroundTaskRepository, BackgroundTaskRepository>();
         services.AddScoped<IDataImportRepository, DataImportRepository>();
 
         services.AddScoped<IFileHandlerService, FileHandlerService>();

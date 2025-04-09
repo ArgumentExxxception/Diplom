@@ -1,0 +1,161 @@
+﻿@page "/background-tasks"
+@using Core
+@using Core.Models
+@using Domain.Enums
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IBackgroundTaskService BackgroundTaskService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Фоновые процессы</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudPaper Elevation="3" Class="pa-4">
+        <MudText Typo="Typo.h4" Class="mb-4">Мои фоновые процессы</MudText>
+
+        <MudGrid>
+            <MudItem xs="12" md="4" Class="d-flex align-center gap-2">
+                <MudIcon Icon="@Icons.Material.Filled.FilterList" />
+                <MudSelect T="BackgroundTaskStatus?" Label="Фильтр по статусу" Value="@statusFilter"
+                           ValueChanged="@(async (val) => await ApplyFilter(val))" Clearable="true">
+                    <MudSelectItem T="BackgroundTaskStatus?" Value="@BackgroundTaskStatus.Pending">В ожидании</MudSelectItem>
+                    <MudSelectItem T="BackgroundTaskStatus?" Value="@BackgroundTaskStatus.Running">Выполняется</MudSelectItem>
+                    <MudSelectItem T="BackgroundTaskStatus?" Value="@BackgroundTaskStatus.Completed">Завершено</MudSelectItem>
+                    <MudSelectItem T="BackgroundTaskStatus?" Value="@BackgroundTaskStatus.Failed">Ошибка</MudSelectItem>
+                    <MudSelectItem T="BackgroundTaskStatus?" Value="@BackgroundTaskStatus.Cancelled">Отменено</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-center gap-2">
+                <MudIcon Icon="@Icons.Material.Filled.TableRows" />
+                <MudSelect T="int" Label="Записей на странице" Value="@rowsPerPage" ValueChanged="@(val => RowsPerPageChanged(val))">
+                    <MudSelectItem Value="5">5</MudSelectItem>
+                    <MudSelectItem Value="10">10</MudSelectItem>
+                    <MudSelectItem Value="25">25</MudSelectItem>
+                    <MudSelectItem Value="50">50</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-center justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshTasks" StartIcon="@Icons.Material.Filled.Refresh">
+                    Обновить
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        <MudTable Items="@paginatedTasks" Dense="true" Hover="true" Striped="true" Loading="@isLoading"
+                  Bordered="true" Class="mt-4" @ref="table">
+            <ColGroup>
+                <col style="width: 40px;" />
+                <col style="width: 250px;" />
+                <col style="width: 150px;" />
+                <col style="width: 120px;" />
+                <col style="width: 150px;" />
+                <col style="width: 150px;" />
+                <col />
+                <col style="width: 100px;" />
+            </ColGroup>
+            <HeaderContent>
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<BackgroundTask, object>(x => x.Status)" InitialDirection="SortDirection.Descending">
+                        <MudIcon Icon="@Icons.Material.Filled.Sync" />
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<BackgroundTask, object>(x => x.Name)">
+                        Название
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<BackgroundTask, object>(x => x.TaskType)">
+                        Тип
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<BackgroundTask, object>(x => x.Status)">
+                        Статус
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<BackgroundTask, object>(x => x.CreatedAt)">
+                        Создан
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<BackgroundTask, object>(x => x.CompletedAt)">
+                        Завершен
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>Прогресс</MudTh>
+                <MudTh>Действия</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudIcon Icon="@GetTaskIcon(context)" Color="@GetTaskColor(context)" />
+                </MudTd>
+                <MudTd>
+                    <MudTooltip Text="@context.Description">
+                        <MudText Typo="Typo.body2">@context.Name</MudText>
+                    </MudTooltip>
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Text">
+                        @GetTaskTypeName(context.TaskType)
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Color="@GetTaskColor(context)" Size="Size.Small">
+                        @GetTaskStatusName(context.Status)
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudText Typo="Typo.body2">@context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</MudText>
+                </MudTd>
+                <MudTd>
+                    @if (context.CompletedAt.HasValue)
+                    {
+                        <MudText Typo="Typo.body2">@context.CompletedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">-</MudText>
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudProgressLinear Color="@GetTaskColor(context)"
+                                       Value="@context.Progress"
+                                       Striped="@(context.Status == BackgroundTaskStatus.Running)"
+                                       Indeterminate="@(context.Status == BackgroundTaskStatus.Pending)"
+                                       Class="my-1" />
+                    <MudText Typo="Typo.caption" Align="Align.Right">@context.Progress%</MudText>
+                </MudTd>
+                <MudTd>
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                        <MudTooltip Text="Подробности">
+                            <MudIconButton Icon="@Icons.Material.Filled.Info"
+                                           Color="Color.Info"
+                                           OnClick="() => ShowTaskDetails(context)" />
+                        </MudTooltip>
+                        @if (context.Status == BackgroundTaskStatus.Running || context.Status == BackgroundTaskStatus.Pending)
+                        {
+                            <MudTooltip Text="Отменить">
+                                <MudIconButton Icon="@Icons.Material.Filled.Cancel"
+                                               Color="Color.Error"
+                                               OnClick="() => CancelTask(context)" />
+                            </MudTooltip>
+                        }
+                    </MudButtonGroup>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+            <NoRecordsContent>
+                <MudText Align="Align.Center" Class="my-4">Фоновые процессы не найдены</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText Align="Align.Center" Class="my-4">Загрузка данных...</MudText>
+            </LoadingContent>
+        </MudTable>
+    </MudPaper>
+</MudContainer>

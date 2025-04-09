@@ -89,7 +89,7 @@ public class FileController: ControllerBase
                 importRequest,
                 stream,
                 file.ContentType,
-                User.Identity?.Name ?? "unknown");
+                importRequest.UserEmail);
 
             // Возвращаем информацию о запущенной задаче
             return Accepted(new { Message = "Импорт запущен в фоне", TaskId = task.Id });

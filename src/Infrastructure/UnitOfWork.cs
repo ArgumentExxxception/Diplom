@@ -10,6 +10,7 @@ public class UnitOfWork: IUnitOfWork
     private readonly Context _context;
     private IUserRepository _userRepository;
     private IRefreshTokenRepository _refreshTokenRepository;
+    private IBackgroundTaskRepository _backgroundTaskRepository;
     
     public UnitOfWork(Context context)
     {
@@ -42,6 +43,12 @@ public class UnitOfWork: IUnitOfWork
     /// </summary>
     public IRefreshTokenRepository RefreshTokens => 
         _refreshTokenRepository ??= new RefreshTokenRepository(_context);
+    
+    /// <summary>
+    /// Репозиторий для работы с фоновыми задачами
+    /// </summary>
+    public IBackgroundTaskRepository BackgroundTasks =>
+        _backgroundTaskRepository ??= new BackgroundTaskRepository(_context);
     public async Task<bool> CommitAsync()
     {
         return await _context.SaveChangesAsync() > 0;

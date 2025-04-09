@@ -9,5 +9,6 @@ public interface IUnitOfWork: IDisposable
     Task<T> ExecuteScalarAsync<T>(string sqlQuery);
     IUserRepository Users { get; }
     IRefreshTokenRepository RefreshTokens { get; }
+    IBackgroundTaskRepository BackgroundTasks { get; }
     Task<bool> CommitAsync();
 }

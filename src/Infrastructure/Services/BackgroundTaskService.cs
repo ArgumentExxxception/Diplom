@@ -1,115 +1,148 @@
-﻿using Core;
+﻿using AutoMapper;
+using Core;
 using Core.Models;
+using Domain.Entities;
 using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Infrastructure.Services;
-
-public class BackgroundTaskService : IBackgroundTaskService
+namespace Infrastructure.Services
 {
-    private readonly Dictionary<Guid, BackgroundTask> _tasks = new();
-    private readonly Dictionary<Guid, CancellationTokenSource> _cancellationTokens = new();
-    private readonly SemaphoreSlim _semaphore;
-    private readonly int _maxConcurrentTasks;
-    private readonly IServiceScopeFactory _serviceScopeFactory; // Добавляем IServiceScopeFactory
-
-    public event EventHandler<BackgroundTask> TaskStatusChanged;
-    public event EventHandler<BackgroundTask> TaskCompleted;
-
-    public BackgroundTaskService(
-        IServiceScopeFactory serviceScopeFactory, // Инжектируем IServiceScopeFactory вместо IFileHandlerService
-        int maxConcurrentTasks = 3)
+    public class BackgroundTaskService : IBackgroundTaskService
     {
-        _serviceScopeFactory = serviceScopeFactory;
-        _maxConcurrentTasks = maxConcurrentTasks;
-        _semaphore = new SemaphoreSlim(maxConcurrentTasks, maxConcurrentTasks);
-    }
+        private readonly IServiceScopeFactory _serviceScopeFactory;
+        private readonly SemaphoreSlim _semaphore;
+        private readonly IMapper _mapper;
+        private readonly int _maxConcurrentTasks;
+        private readonly Dictionary<Guid, CancellationTokenSource> _cancellationTokens = new();
 
-    public async Task<BackgroundTask> EnqueueImportTaskAsync(
-        string fileName,
-        long fileSize,
-        TableImportRequestModel importRequest,
-        Stream fileStream,
-        string contentType,
-        string userName)
-    {
-        var tempFilePath = Path.GetTempFileName();
-        using (var tempFile = File.Create(tempFilePath))
+        public event EventHandler<BackgroundTask> TaskStatusChanged;
+        public event EventHandler<BackgroundTask> TaskCompleted;
+
+        public BackgroundTaskService(
+            IServiceScopeFactory serviceScopeFactory,
+            IMapper mapper,
+            int maxConcurrentTasks = 3)
         {
-            await fileStream.CopyToAsync(tempFile);
+            _serviceScopeFactory = serviceScopeFactory;
+            _mapper = mapper;
+            _maxConcurrentTasks = maxConcurrentTasks;
+            _semaphore = new SemaphoreSlim(maxConcurrentTasks, maxConcurrentTasks);
         }
 
-        var task = new BackgroundTask
+        public async Task<BackgroundTask> EnqueueImportTaskAsync(
+            string fileName,
+            long fileSize,
+            TableImportRequestModel importRequest,
+            Stream fileStream,
+            string contentType,
+            string userName)
         {
-            Name = $"Import {fileName}",
-            Description = $"Importing {fileName} to table {importRequest.TableName}",
-            Status = BackgroundTaskStatus.Pending,
-            TaskType = BackgroundTaskType.Import,
-            UserId = userName,
-            TaskData = new Dictionary<string, object>
+            // Сохраняем файл во временное хранилище
+            var tempFilePath = Path.GetTempFileName();
+            using (var tempFile = File.Create(tempFilePath))
             {
-                { "FileName", fileName },
-                { "FileSize", fileSize },
-                { "TableName", importRequest.TableName },
-                { "ImportMode", importRequest.ImportMode }
+                await fileStream.CopyToAsync(tempFile);
             }
-        };
 
-        _tasks[task.Id] = task;
-        var cts = new CancellationTokenSource();
-        _cancellationTokens[task.Id] = cts;
+            // Создаем новую задачу
+            var task = new BackgroundTask
+            {
+                Name = $"Импорт {fileName}",
+                Description = $"Импорт файла {fileName} в таблицу {importRequest.TableName}",
+                Status = BackgroundTaskStatus.Pending,
+                TaskType = BackgroundTaskType.Import,
+                UserId = userName,
+                TaskData = new Dictionary<string, object>
+                {
+                    { "FileName", fileName },
+                    { "FileSize", fileSize },
+                    { "TableName", importRequest.TableName },
+                    { "ImportMode", importRequest.ImportMode },
+                    { "ContentType", contentType },
+                    { "TempFilePath", tempFilePath }
+                }
+            };
 
-        // Start the task in the background
-        _ = Task.Run(async () =>
+            // Сохраняем задачу в БД
+            using (var scope = _serviceScopeFactory.CreateScope())
+            {
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                await unitOfWork.BackgroundTasks.Add(_mapper.Map<BackgroundTask, BackgroundTaskEntity>(task));
+                await unitOfWork.CommitAsync();
+            }
+
+            var cts = new CancellationTokenSource();
+            _cancellationTokens[task.Id] = cts;
+
+            // Запускаем задачу в фоне
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var tempFileStream = File.OpenRead(tempFilePath);
+                    await ExecuteImportTaskAsync(task.Id, tempFileStream, fileName, contentType, importRequest, userName, cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    using var scope = _serviceScopeFactory.CreateScope();
+                    var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                    await unitOfWork.BackgroundTasks.FailTaskAsync(task.Id, ex.Message);
+                    await unitOfWork.CommitAsync();
+                }
+                finally
+                {
+                    // Удаляем временный файл после завершения
+                    try
+                    {
+                        if (File.Exists(tempFilePath))
+                            File.Delete(tempFilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Логирование ошибки удаления можно добавить при необходимости
+                    }
+
+                    _cancellationTokens.Remove(task.Id);
+                }
+            });
+
+            return task;
+        }
+
+        private async Task ExecuteImportTaskAsync(
+            Guid taskId,
+            Stream fileStream,
+            string fileName,
+            string contentType,
+            TableImportRequestModel importRequest,
+            string userName,
+            CancellationToken cancellationToken)
         {
             try
             {
-                using (var tempFileStream = File.OpenRead(tempFilePath))
-                {
-                    await ExecuteImportTaskAsync(task, tempFileStream, fileName, 
-                        contentType, importRequest, userName);
-                }
-            }
-            finally
-            {
-                File.Delete(tempFilePath);
-            }
-        });
+                // Ждем доступный слот
+                await _semaphore.WaitAsync(cancellationToken);
 
-        return task;
-    }
+                using var scope = _serviceScopeFactory.CreateScope();
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-    private async Task ExecuteImportTaskAsync(
-        BackgroundTask task,
-        Stream fileStream,
-        string fileName,
-        string contentType,
-        TableImportRequestModel importRequest,
-        string userName,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Wait for a slot to become available
-            await _semaphore.WaitAsync(cancellationToken);
+                // Обновляем статус задачи на Running
+                await unitOfWork.BackgroundTasks.UpdateStatusAsync(taskId, BackgroundTaskStatus.Running);
+                await unitOfWork.CommitAsync();
 
-            // Update task status
-            task.Status = BackgroundTaskStatus.Running;
-            task.StartedAt = DateTime.UtcNow;
-            OnTaskStatusChanged(task);
+                // Уведомляем об изменении статуса
+                var updatedTask = await GetTaskByIdAsync(taskId);
+                OnTaskStatusChanged(updatedTask);
 
-            // Create a memory stream to store the file content
-            using var memoryStream = new MemoryStream();
-            await fileStream.CopyToAsync(memoryStream, cancellationToken);
-            memoryStream.Position = 0;
+                // Копируем поток в память
+                using var memoryStream = new MemoryStream();
+                await fileStream.CopyToAsync(memoryStream, cancellationToken);
+                memoryStream.Position = 0;
 
-            // Создаем область видимости для scoped-сервисов
-            using (var scope = _serviceScopeFactory.CreateScope())
-            {
-                // Получаем FileHandlerService из DI в рамках этой области видимости
+                // Выполняем импорт с помощью FileHandlerService
                 var fileHandlerService = scope.ServiceProvider.GetRequiredService<IFileHandlerService>();
-
-                // Execute the import
                 var result = await fileHandlerService.ImportDataAsync(
                     memoryStream,
                     fileName,
@@ -117,107 +150,138 @@ public class BackgroundTaskService : IBackgroundTaskService
                     importRequest,
                     cancellationToken);
 
-                // Update task with results
-                task.CompletedAt = DateTime.UtcNow;
-                task.Status = result.Success ? BackgroundTaskStatus.Completed : BackgroundTaskStatus.Failed;
-                task.Progress = 100;
-                task.Result = result;
+                // Проверяем запрос на отмену
+                cancellationToken.ThrowIfCancellationRequested();
 
-                if (!result.Success)
+                var taskEntity = await unitOfWork.BackgroundTasks.GetByIdAsync(taskId);
+                if (taskEntity.CancellationRequested)
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                // Обновляем задачу согласно результату импорта
+                if (result.Success)
                 {
-                    task.ErrorMessage = result.Message;
+                    await unitOfWork.BackgroundTasks.CompleteTaskAsync(taskId, result);
                 }
+                else
+                {
+                    await unitOfWork.BackgroundTasks.FailTaskAsync(taskId, result.Message);
+                }
+
+                await unitOfWork.CommitAsync();
+
+                // Уведомляем об изменении и завершении задачи
+                var completedTask = await GetTaskByIdAsync(taskId);
+                OnTaskStatusChanged(completedTask);
+                OnTaskCompleted(completedTask);
             }
+            catch (OperationCanceledException)
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-            OnTaskStatusChanged(task);
-            OnTaskCompleted(task);
+                // Помечаем задачу как отменённую
+                await unitOfWork.BackgroundTasks.UpdateStatusAsync(
+                    taskId,
+                    BackgroundTaskStatus.Cancelled,
+                    0,
+                    "Задача была отменена пользователем");
+
+                await unitOfWork.CommitAsync();
+
+                var cancelledTask = await GetTaskByIdAsync(taskId);
+                OnTaskStatusChanged(cancelledTask);
+                OnTaskCompleted(cancelledTask);
+            }
+            catch (Exception ex)
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+                // Помечаем задачу как завершённую с ошибкой
+                await unitOfWork.BackgroundTasks.FailTaskAsync(taskId, ex.Message);
+                await unitOfWork.CommitAsync();
+
+                var failedTask = await GetTaskByIdAsync(taskId);
+                OnTaskStatusChanged(failedTask);
+                OnTaskCompleted(failedTask);
+            }
+            finally
+            {
+                // Освобождаем семафор
+                _semaphore.Release();
+            }
         }
-        catch (OperationCanceledException)
+
+        public async Task<List<BackgroundTask>> GetActiveTasksAsync()
         {
-            task.Status = BackgroundTaskStatus.Cancelled;
-            task.CompletedAt = DateTime.UtcNow;
-            task.ErrorMessage = "Task was cancelled";
-            OnTaskStatusChanged(task);
-            OnTaskCompleted(task);
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var activeTaskEntities = await unitOfWork.BackgroundTasks.GetActiveTasksAsync();
+            return activeTaskEntities.Select(e => _mapper.Map<BackgroundTaskEntity, BackgroundTask>(e)).ToList();
         }
-        catch (Exception ex)
+
+        public async Task<BackgroundTask> GetTaskByIdAsync(Guid taskId)
         {
-            task.Status = BackgroundTaskStatus.Failed;
-            task.CompletedAt = DateTime.UtcNow;
-            task.ErrorMessage = ex.Message;
-            OnTaskStatusChanged(task);
-            OnTaskCompleted(task);
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var taskEntity = await unitOfWork.BackgroundTasks.GetByIdAsync(taskId);
+            return _mapper.Map<BackgroundTaskEntity, BackgroundTask>(taskEntity);
         }
-        finally
+
+        // Если нужен синхронный метод, его можно реализовать через GetAwaiter().GetResult(), но лучше использовать асинхронные методы.
+        public Task<BackgroundTask> GetTaskById(Guid taskId)
         {
-            // Release the semaphore slot
-            _semaphore.Release();
+            return GetTaskByIdAsync(taskId);
         }
-    }
 
-    public List<BackgroundTask> GetActiveTasks()
-    {
-        return _tasks.Values
-            .Where(t => t.Status == BackgroundTaskStatus.Pending || t.Status == BackgroundTaskStatus.Running)
-            .OrderByDescending(t => t.CreatedAt)
-            .ToList();
-    }
-
-    public BackgroundTask GetTaskById(Guid taskId)
-    {
-        return _tasks.TryGetValue(taskId, out var task) ? task : null;
-    }
-
-    public List<BackgroundTask> GetTasksByUser(string userId)
-    {
-        return _tasks.Values
-            .Where(t => t.UserId == userId)
-            .OrderByDescending(t => t.CreatedAt)
-            .ToList();
-    }
-
-    public async Task<bool> CancelTaskAsync(Guid taskId)
-    {
-        if (_cancellationTokens.TryGetValue(taskId, out var cts) && _tasks.TryGetValue(taskId, out var task))
+        public async Task<List<BackgroundTask>> GetTasksByUserAsync(string userId)
         {
-            if (task.Status == BackgroundTaskStatus.Pending || task.Status == BackgroundTaskStatus.Running)
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var taskEntities = await unitOfWork.BackgroundTasks.GetTasksByUserAsync(userId);
+            return taskEntities.Select(e => _mapper.Map<BackgroundTaskEntity, BackgroundTask>(e)).ToList();
+        }
+
+        public async Task<bool> CancelTaskAsync(Guid taskId)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            var taskEntity = await unitOfWork.BackgroundTasks.GetByIdAsync(taskId);
+            if (taskEntity == null ||
+                (taskEntity.Status != BackgroundTaskStatus.Pending &&
+                 taskEntity.Status != BackgroundTaskStatus.Running))
+                return false;
+
+            // Помечаем задачу как запрошенную для отмены
+            await unitOfWork.BackgroundTasks.RequestCancellationAsync(taskId);
+            await unitOfWork.CommitAsync();
+
+            // Если CancellationTokenSource существует – отменяем задачу
+            if (_cancellationTokens.TryGetValue(taskId, out var cts))
             {
                 cts.Cancel();
                 return true;
             }
+
+            return true;
         }
-        return false;
-    }
 
-    public void CleanupOldTasks(TimeSpan olderThan)
-    {
-        var cutoff = DateTime.UtcNow - olderThan;
-        var oldTaskIds = _tasks.Values
-            .Where(t => (t.Status == BackgroundTaskStatus.Completed || 
-                         t.Status == BackgroundTaskStatus.Failed || 
-                         t.Status == BackgroundTaskStatus.Cancelled) &&
-                        t.CompletedAt.HasValue && 
-                        t.CompletedAt.Value < cutoff)
-            .Select(t => t.Id)
-            .ToList();
-
-        foreach (var id in oldTaskIds)
+        public async Task CleanupOldTasksAsync(TimeSpan olderThan)
         {
-            _tasks.Remove(id);
-            if (_cancellationTokens.ContainsKey(id))
-            {
-                _cancellationTokens.Remove(id);
-            }
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await unitOfWork.BackgroundTasks.CleanupOldTasksAsync(olderThan);
         }
-    }
 
-    protected virtual void OnTaskStatusChanged(BackgroundTask task)
-    {
-        TaskStatusChanged?.Invoke(this, task);
-    }
+        protected virtual void OnTaskStatusChanged(BackgroundTask task)
+        {
+            TaskStatusChanged?.Invoke(this, task);
+        }
 
-    protected virtual void OnTaskCompleted(BackgroundTask task)
-    {
-        TaskCompleted?.Invoke(this, task);
+        protected virtual void OnTaskCompleted(BackgroundTask task)
+        {
+            TaskCompleted?.Invoke(this, task);
+        }
     }
 }

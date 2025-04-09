@@ -31,7 +31,7 @@ public class BackgroundTaskCleanupService : BackgroundService
                     var backgroundTaskService = scope.ServiceProvider.GetRequiredService<IBackgroundTaskService>();
                     
                     // Вызываем метод очистки
-                    backgroundTaskService.CleanupOldTasks(_taskMaxAge);
+                    backgroundTaskService.CleanupOldTasksAsync(_taskMaxAge);
                 }
             }
             catch (Exception ex)
