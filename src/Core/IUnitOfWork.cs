@@ -10,5 +10,6 @@ public interface IUnitOfWork: IDisposable
     IUserRepository Users { get; }
     IRefreshTokenRepository RefreshTokens { get; }
     IBackgroundTaskRepository BackgroundTasks { get; }
+    IImportColumnMetadataRepository ImportColumnMetadatas { get; }
     Task<bool> CommitAsync();
 }

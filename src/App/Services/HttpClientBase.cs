@@ -144,7 +144,7 @@ public class HttpClientBase
     /// <summary>
     /// Установка заголовка авторизации
     /// </summary>
-    private async Task SetAuthHeaderAsync()
+    protected async Task SetAuthHeaderAsync()
     {
         var token = await _localStorage.GetItemAsync<string>("authToken");
         if (!string.IsNullOrEmpty(token))

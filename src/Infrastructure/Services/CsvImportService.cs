@@ -22,16 +22,15 @@ public class CsvImportService: ICsvImportService
         _dataImportRepository = dataImportRepository;
     }
 
-    public async Task ProcessCSVFileAsync(
-        Stream fileStream,
-        TableImportRequestModel importRequest,
-        string userName,
-        ImportResult importResult,
-        CancellationToken cancellationToken)
+public async Task ProcessCSVFileAsync(
+    Stream fileStream,
+    TableImportRequestModel importRequest,
+    string userName,
+    ImportResult importResult,
+    CancellationToken cancellationToken)
     {
         try
         {
-            // Получаем существующие данные для проверки дубликатов (если импорт не для новой таблицы)
             List<Dictionary<string, object>> existingData = new List<Dictionary<string, object>>();
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -42,35 +41,35 @@ public class CsvImportService: ICsvImportService
 
             if (!importRequest.IsNewTable)
             {
-                existingData =
-                    await _dataImportRepository.GetExistingDataAsync(importRequest.TableName, cancellationToken);
+                existingData = await _dataImportRepository.GetExistingDataAsync(importRequest.TableName, cancellationToken);
             }
 
-            // Сбрасываем позицию потока
-            fileStream.Position = 0;
+            using var reader = new StreamReader(fileStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+            using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
 
-            // Настройка CsvHelper: предполагается, что CSV содержит заголовок,
-            // но сопоставление по имени не требуется – данные будут считываться по порядку.
-            using var reader = new StreamReader(fileStream);
-            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
-            {
-                HasHeaderRecord = true, // Заголовок может присутствовать, но мы его не используем для сопоставления
-                IgnoreBlankLines = true,
-                BadDataFound = null, // Опционально: можно логировать некорректные строки
-            };
-
-            using var csv = new CsvReader(reader, config);
-            // Пропускаем заголовок, если он есть
-            if (config.HasHeaderRecord)
+            // Если в CSV есть заголовки, пропускаем их
+            if (importRequest.HasHeaderRow)
             {
                 await csv.ReadAsync();
                 csv.ReadHeader();
             }
+            
+            // Пропускаем дополнительные строки согласно параметру SkipRows
+            if (importRequest.SkipRows > 0)
+            {
+                for (int i = 0; i < importRequest.SkipRows; i++)
+                {
+                    // Читаем и пропускаем строку, если она существует
+                    if (!await csv.ReadAsync())
+                    {
+                        break;
+                    }
+                }
+            }
 
             var rowsToImport = new List<Dictionary<string, object>>();
             var duplicatedRows = new List<Dictionary<string, object>>();
-            int rowIndex =
-                config.HasHeaderRecord ? 1 : 0; // если заголовок есть, первая строка с данными будет под номером 2
+            int rowIndex = 0;
 
             while (await csv.ReadAsync())
             {
@@ -80,26 +79,19 @@ public class CsvImportService: ICsvImportService
                 var rowData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 bool rowHasErrors = false;
 
-                // Обрабатываем данные по порядку:
-                // Каждая колонка CSV назначается столбцу из importRequest.Columns согласно порядку.
-                for (int colIndex = 0; colIndex < importRequest.Columns.Count; colIndex++)
+                for (int i = 0; i < importRequest.Columns.Where(x => x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN).Count(); i++)
                 {
-                    var column = importRequest.Columns[colIndex];
-                    string fieldValue = string.Empty;
+                    var column = importRequest.Columns[i];
+                    string value = csv.GetField(i);
 
                     try
                     {
-                        // Получаем значение поля по порядковому номеру
-                        fieldValue = csv.GetField(colIndex);
-                    }
-                    catch
-                    {
-                        // Если поле отсутствует, оставляем пустым
-                    }
-
-                    if (string.IsNullOrWhiteSpace(fieldValue))
-                    {
-                        if (column.IsRequired)
+                        if (!string.IsNullOrWhiteSpace(value))
+                        {
+                            var typedValue = DataProcessingUtils.ConvertToTargetType(value, column.Type);
+                            rowData[column.Name] = typedValue;
+                        }
+                        else if (column.IsRequired)
                         {
                             rowHasErrors = true;
                             importResult.ErrorCount++;
@@ -109,34 +101,43 @@ public class CsvImportService: ICsvImportService
                                 ErrorMessage = $"Отсутствует обязательное поле '{column.Name}'"
                             });
                         }
+                        else
+                        {
+                            rowData[column.Name] = null;
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        try
+                        rowHasErrors = true;
+                        importResult.ErrorCount++;
+                        importResult.Errors.Add(new ImportError
                         {
-                            // Преобразуем значение в тип, соответствующий колонке
-                            var typedValue = DataProcessingUtils.ConvertToTargetType(fieldValue, column.Type);
-                            rowData[column.Name] = typedValue;
-                        }
-                        catch (Exception ex)
-                        {
-                            rowHasErrors = true;
-                            importResult.ErrorCount++;
-                            importResult.Errors.Add(new ImportError
-                            {
-                                RowNumber = rowIndex,
-                                ErrorMessage =
-                                    $"Ошибка в колонке '{column.Name}': {ex.Message}. Значение: '{fieldValue}'"
-                            });
-                        }
+                            RowNumber = rowIndex,
+                            ErrorMessage = $"Ошибка в элементе '{column.Name}': {ex.Message}. Значение: '{value}'"
+                        });
                     }
                 }
 
-                // Добавляем служебные поля
+                // Проверка всех обязательных полей (на случай, если их больше, чем в CSV)
+                foreach (var column in importRequest.Columns.Where(c =>
+                             c.IsRequired && c.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && c.Name != DataProcessingUtils.MODIFIED_DATE_COLUMN))
+                {
+                    if (!rowData.ContainsKey(column.Name) || rowData[column.Name] == null)
+                    {
+                        rowHasErrors = true;
+                        importResult.ErrorCount++;
+                        importResult.Errors.Add(new ImportError
+                        {
+                            RowNumber = rowIndex,
+                            ErrorMessage = $"Отсутствует обязательное поле '{column.Name}'"
+                        });
+                    }
+                }
+
+                // Устанавливаем служебные поля
                 rowData[DataProcessingUtils.MODIFIED_DATE_COLUMN] = DateTime.UtcNow;
                 rowData[DataProcessingUtils.MODIFIED_BY_COLUMN] = userName;
 
-                // Если нет ошибок, проверяем дубликаты (если это не новая таблица)
                 if (!rowHasErrors)
                 {
                     if (!importRequest.IsNewTable && existingData.Count > 0)
@@ -161,35 +162,59 @@ public class CsvImportService: ICsvImportService
 
                 importResult.RowsProcessed++;
 
-                // Пакетная обработка: при накоплении 1000 строк выполняем вставку в БД
+                // Пакетная обработка
                 if (rowsToImport.Count >= 1000)
                 {
-                    // await ImportDataInParallelAsync(
-                    //     importRequest.TableName,
-                    //     rowsToImport,
-                    //     new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
-                    // rowsToImport.Clear();
+                    await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
+                    rowsToImport.Clear();
                 }
             }
 
             importResult.DuplicatedRows = duplicatedRows;
 
-            // Импорт оставшихся строк
+            // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
-                await _dataImportRepository.ImportDataBatchAsync(
-                    importRequest.TableName,
-                    rowsToImport,
-                    new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
             }
-
-            importResult.RowsUpdated = importResult.RowsProcessed - importResult.RowsInserted -
-                                       importResult.RowsSkipped - importResult.ErrorCount;
+            importResult.RowsUpdated = importResult.RowsProcessed - importResult.RowsInserted - importResult.RowsSkipped - importResult.ErrorCount;
         }
         catch (Exception ex)
         {
-            // Обработка ошибок: логирование и проброс исключения
-            throw;
+            throw new Exception("Ошибка при обработке CSV: " + ex.Message, ex);
         }
+    }
+
+    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, int maxParallelism = 4)
+    {
+        if (rowsToImport.Count == 0) return;
+
+        int batchSize = 1000;
+        var batches = rowsToImport.Select((row, index) => new { row, index })
+            .GroupBy(x => x.index / batchSize)
+            .Select(g => g.Select(x => x.row).ToList())
+            .ToList();
+
+        using var semaphore = new SemaphoreSlim(maxParallelism);
+        var tasks = new List<Task>();
+
+        foreach (var batch in batches)
+        {
+            await semaphore.WaitAsync();
+
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
     }
 }

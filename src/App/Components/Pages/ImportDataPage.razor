@@ -58,13 +58,13 @@
                                         <MudTd DataLabel="Имя колонки">@context.Name</MudTd>
                                         <MudTd DataLabel="Тип данных">@((ColumnTypes)context.Type)</MudTd>
                                         <MudTd DataLabel="Обязательное">
-                                            <MudCheckBox T="bool" ReadOnly="true" @bind-Checked="context.IsRequired" Color="Color.Primary" />
+                                            <MudCheckBox T="bool" ReadOnly="true" CheckedIcon="@Icons.Material.Filled.Check" Value="context.IsRequired" Color="Color.Primary" />
                                         </MudTd>
                                         <MudTd DataLabel="Обязательное">
-                                            <MudCheckBox T="bool" ReadOnly="true" @bind-Checked="context.SearchInDuplicates" Color="Color.Primary" />
+                                            <MudCheckBox T="bool" ReadOnly="true" CheckedIcon="@Icons.Material.Filled.Check" Value="context.SearchInDuplicates" Color="Color.Primary" />
                                         </MudTd>
                                         <MudTd DataLabel="Обязательное">
-                                            <MudCheckBox T="bool" ReadOnly="true" @bind-Checked="context.IsGeoTag" Color="Color.Primary" />
+                                            <MudCheckBox T="bool" ReadOnly="true" CheckedIcon="@Icons.Material.Filled.Check" Value="context.IsGeoTag" Color="Color.Primary" />
                                         </MudTd>
                                     </RowTemplate>
                                 </MudTable>
@@ -194,6 +194,16 @@
                                       Label="Элемент строки XML"
                                       HelperText="Название элемента, представляющего строку данных"
                                       AdornmentIcon="@Icons.Material.Filled.ViewList" />
+                    </MudItem>
+                }
+                @if (IsCsvFile())
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudNumericField T="int" @bind-Value="@csvSkippedRows"
+                                         Min="0"
+                                         Label="Количество пропускаемых строк"
+                                         HelperText="Количество пропускаемых строк"
+                                         AdornmentIcon="@Icons.Material.Filled.Code" />
                     </MudItem>
                 }
             </MudGrid>

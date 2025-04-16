@@ -2,6 +2,7 @@
 using System.Text;
 using Core;
 using Core.Models;
+using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,66 +12,63 @@ public class DataImportRepository: IDataImportRepository
 {
     private readonly Context _dbContext;
     private readonly IDatabaseService _databaseService;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public DataImportRepository(Context dbContext, IDatabaseService databaseService)
+    public DataImportRepository(Context dbContext, IDatabaseService databaseService, IUnitOfWork unitOfWork)
     {
         _dbContext = dbContext;
         _databaseService = databaseService;
+        _unitOfWork = unitOfWork;
     }
     
-    public async Task UpdateDuplicatedRows(string tableName, List<Dictionary<string, object>> newDataList,
-        List<string> primaryKeys, Dictionary<string, object> duplicateRow, CancellationToken cancellationToken)
+    public async Task DeleteDuplicatesAsync(
+        string tableName,
+        List<Dictionary<string, object>> filters,
+        CancellationToken cancellationToken = default)
     {
-        // Открываем транзакцию
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        try
+        foreach (var filter in filters)
         {
-            // Проходим по каждому элементу в списке новых данных
-            foreach (var newData in newDataList)
+            var whereClauses = new List<string>();
+            var parameters = new List<object>();
+            int paramIndex = 0;
+
+            foreach (var kv in filter)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                // Формируем SET часть запроса
-                var setClause = string.Join(", ", newData
-                    .Where(kv => !primaryKeys.Contains(kv.Key)) // Исключаем первичные ключи из обновления
-                    .Select(kv => $"\"{kv.Key}\" = @{kv.Key}"));
-
-                // Формируем WHERE часть запроса
-                var whereClause = string.Join(" AND ", primaryKeys
-                    .Select(pk => $"\"{pk}\" = @{pk}"));
-
-                // Формируем полный запрос
-                var query = $"UPDATE \"{tableName}\" SET {setClause} WHERE {whereClause};";
-
-                // Создаем параметры для запроса
-                var parameters = new List<object>();
-                foreach (var kv in newData)
-                {
-                    if (!primaryKeys.Contains(kv.Key)) // Параметры для SET
-                    {
-                        parameters.Add(($"@{kv.Key}", kv.Value ?? DBNull.Value));
-                    }
-                }
-                foreach (var pk in primaryKeys) // Параметры для WHERE
-                {
-                    parameters.Add(($"@{pk}", duplicateRow[pk] ?? DBNull.Value));
-                }
-
-                // Выполняем запрос
-                await _dbContext.Database.ExecuteSqlRawAsync(query, parameters.ToArray());
+                string paramName = $"@p{paramIndex}";
+                object normalizedValue = NormalizeValue(kv.Value);
+                // Используем двойные кавычки для экранирования имен колонок в PostgreSQL
+                whereClauses.Add($"\"{kv.Key}\" = {paramName}");
+                parameters.Add(normalizedValue ?? DBNull.Value);
+                paramIndex++;
             }
 
-            // Фиксируем транзакцию
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            // Откатываем транзакцию в случае ошибки
-            await transaction.RollbackAsync(cancellationToken);
-            throw new InvalidOperationException("Ошибка при обновлении дубликатов. Транзакция откачена.", ex);
+            string whereClause = string.Join(" AND ", whereClauses);
+            // Аналогично для имени таблицы
+            string deleteSql = $"DELETE FROM \"{tableName}\" WHERE {whereClause}";
+
+            await _dbContext.Database.ExecuteSqlRawAsync(deleteSql, parameters.ToArray(), cancellationToken);
         }
     }
 
+    
+    private object NormalizeValue(object value)
+    {
+        // Если значение уже не словарь, просто возвращаем его.
+        if (!(value is Dictionary<string, object> nested))
+            return value;
+    
+        // Если вложенный словарь содержит ровно один элемент,
+        // можно считать, что нас интересует его значение.
+        if (nested.Count == 1)
+        {
+            return nested.Values.First();
+        }
+    
+        // Если структура более сложная, либо выбрасываем исключение, либо возвращаем строковое представление.
+        // Здесь можно настроить логику под конкретный сценарий.
+        return nested.ToString(); // или throw new InvalidOperationException("Не удалось нормализовать значение фильтра.");
+    }
+    
     public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema, CancellationToken cancellationToken = default)
     {
         if (rows.Count == 0)
@@ -89,18 +87,18 @@ public class DataImportRepository: IDataImportRepository
                 {
                     Name = "lastmodifiedon",
                     Type = (int)ColumnTypes.Date,
-                    IsRequired = true
+                    IsRequired = false
                 });
 
                 schema.Columns.Add(new ColumnInfo
                 {
                     Name = "lastmodifiedby",
                     Type = (int)ColumnTypes.Text,
-                    IsRequired = true
+                    IsRequired = false
                 });
+                await SaveColumnMetadataAsync(tableName, schema.Columns);
             }
 
-            // Подготавливаем SQL запрос для вставки данных
             // Подготавливаем SQL запрос для вставки данных
             StringBuilder insertSql = new StringBuilder();
             insertSql.Append($"INSERT INTO \"{tableName}\" (");
@@ -129,8 +127,8 @@ public class DataImportRepository: IDataImportRepository
                     rowParams.Add(paramName);
 
                     // Получаем значение или NULL, если его нет
-                    object value = rows[i].TryGetValue(column.Name, out var v) ? v : DBNull.Value;
-                    parameters.Add(value ?? DBNull.Value);
+                    object value = rows[i].TryGetValue(column.Name, out var v) ? v : null;
+                    parameters.Add(value);
                 }
                 
                 insertSql.Append(string.Join(", ", rowParams));
@@ -146,6 +144,26 @@ public class DataImportRepository: IDataImportRepository
             await transaction.RollbackAsync(cancellationToken);
             throw new Exception($"Ошибка при импорте данных в таблицу {tableName}: {ex.Message}", ex);
         }
+    }
+
+    private async Task SaveColumnMetadataAsync(string tableName, List<ColumnInfo> columns,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var col in columns)
+        {
+            var metadata = new ImportColumnMetadataEntity()
+            {
+                TableName = tableName,
+                ColumnName = col.Name,
+                IsRequired = col.IsRequired,
+                IsPrimaryKey = col.IsPrimaryKey,
+                IsGeoTag = col.IsGeoTag,
+                SearchInDuplicates = col.SearchInDuplicates
+            };
+
+            await _unitOfWork.ImportColumnMetadatas.Add(metadata);
+        }
+        await _unitOfWork.SaveChangesAsync();
     }
 
     public async Task ClearTableAsync(string tableName, CancellationToken cancellationToken = default)

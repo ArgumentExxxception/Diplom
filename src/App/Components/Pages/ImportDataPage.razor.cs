@@ -45,6 +45,7 @@ public partial class ImportDataPage : ComponentBase
     private string _newTableComment = string.Empty;
     
     private string xmlRootElement = string.Empty;
+    private int csvSkippedRows = 0;
     private string xmlRowElement = string.Empty;
 
     private List<string> availableTables = [];
@@ -157,7 +158,7 @@ public partial class ImportDataPage : ComponentBase
                     _snackbar.Add("Импорт данных успешно завершен", Severity.Success);
                     if (importResult.DuplicatedRows is { Count: > 0 })
                     {
-                        await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows);
+                        await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows,importRequest.Columns);
                     }
                 }
             }
@@ -189,6 +190,7 @@ public partial class ImportDataPage : ComponentBase
                 XmlRowElement = xmlRowElement,
                 HasHeaderRow = true,
                 UserEmail = _currentUserEmail,
+                SkipRows = csvSkippedRows
             };
         }
         else
@@ -216,12 +218,13 @@ public partial class ImportDataPage : ComponentBase
                 XmlRowElement = xmlRowElement,
                 HasHeaderRow = true,
                 UserEmail = _currentUserEmail,
-                TableComment = _newTableComment
+                TableComment = _newTableComment,
+                SkipRows = csvSkippedRows
             };
         }
     }
 
-    private async Task HandleDuplicateRows(string tableName,List<Dictionary<string, object>> duplicateRows)
+    private async Task HandleDuplicateRows(string tableName,List<Dictionary<string, object>> duplicateRows, List<ColumnInfo> columns)
     {
         var options = new DialogOptions
         {
@@ -241,7 +244,7 @@ public partial class ImportDataPage : ComponentBase
 
         if (result is { Canceled: false })
         {
-            await _dataImportClientService.UpdateDuplicate(tableName, duplicateRows);
+            await _dataImportClientService.UpdateDuplicate(tableName, duplicateRows, columns);
         }
     }
 
@@ -284,6 +287,11 @@ public partial class ImportDataPage : ComponentBase
     {
         return selectedFile != null && (selectedFile.ContentType.Contains("xml") || 
                 selectedFile.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+    }
+    private bool IsCsvFile()
+    {
+        return selectedFile != null && (selectedFile.ContentType.Contains("csv") || 
+                                        selectedFile.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase));
     }
     
 

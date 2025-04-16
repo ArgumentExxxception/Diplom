@@ -11,6 +11,7 @@ public class UnitOfWork: IUnitOfWork
     private IUserRepository _userRepository;
     private IRefreshTokenRepository _refreshTokenRepository;
     private IBackgroundTaskRepository _backgroundTaskRepository;
+    private IImportColumnMetadataRepository _columnMetadataRepository;
     
     public UnitOfWork(Context context)
     {
@@ -49,6 +50,12 @@ public class UnitOfWork: IUnitOfWork
     /// </summary>
     public IBackgroundTaskRepository BackgroundTasks =>
         _backgroundTaskRepository ??= new BackgroundTaskRepository(_context);
+    
+    /// <summary>
+    /// Репозиторий для работы с фоновыми задачами
+    /// </summary>
+    public IImportColumnMetadataRepository ImportColumnMetadatas =>
+        _columnMetadataRepository ??= new ImportColumnMetaDataRepository(_context);
     public async Task<bool> CommitAsync()
     {
         return await _context.SaveChangesAsync() > 0;

@@ -23,7 +23,14 @@ public class TablesController: ControllerBase
         var tables = await _mediator.Send(new GetPublicTablesQuery());
         return Ok(tables);
     }
-    
+
+    [HttpGet("metadata")]
+    public async Task<ActionResult<ImportColumnsMetadataModel>> GetTablesMetadata()
+    {
+        var tablesMetadata = await _mediator.Send(new GetTablesMetadataQuery());
+        return Ok(tablesMetadata);
+    }
+
     [HttpPost("create")]
     public async Task<IActionResult> CreateTable([FromBody] TableModel request)
     {

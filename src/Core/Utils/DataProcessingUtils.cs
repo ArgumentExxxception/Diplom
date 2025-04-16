@@ -45,7 +45,6 @@ public static class DataProcessingUtils
         });
     }
     
-    
     /// <summary>
     /// Конвертирует строковое значение в целевой тип данных согласно перечислению ColumnTypes
     /// </summary>
@@ -94,7 +93,9 @@ public static class DataProcessingUtils
                         "yyyy-MM-dd",  // Например, 2021-06-15
                         "MM/dd/yyyy",  // Например, 06/15/2021
                         "dd/MM/yyyy",  // Например, 15/06/2021
-                        "yyyy/MM/dd"   // Например, 2021/06/15
+                        "yyyy/MM/dd",   // Например, 2021/06/15
+                        "yyyyMMdd",
+                        "yyyyddMM"// Например, 20230315
                     };
             
                     if (DateTime.TryParseExact(value, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateValue))

@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using JsonException = System.Text.Json.JsonException;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
@@ -29,24 +30,31 @@ public class FileController: ControllerBase
     }
 
     [HttpPost("update-duplicates")]
-    public async Task<IActionResult> UpdateDuplicates([FromForm] string tableName, [FromForm] string duplicates)
+    public async Task<IActionResult> UpdateDuplicates(
+        [FromForm] string tableName,
+        [FromForm] string duplicates,
+        [FromForm] string columns)
     {
         try
         {
-            // Десериализуем данные о дубликатах
-            var duplicatesDictionary = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(duplicates);
+            // Парсим колонки
+            var columnInfoList = JsonConvert.DeserializeObject<List<ColumnInfo>>(columns);
+            if (columnInfoList == null)
+                return BadRequest(new { Message = "Не удалось десериализовать структуру колонок" });
 
-            if (duplicatesDictionary is null || duplicatesDictionary.Count == 0)
-                throw new JsonException("Не удалось десериализовать дубликаты");
+            // Парсим и нормализуем дубликаты
+            var duplicatesArray = JArray.Parse(duplicates);
+            var duplicatesDictionary = duplicatesArray
+                .Select(item => NormalizeJsonDictionary(item))
+                .ToList();
 
-            // await _fileHandlerService.UpdateDublicates(tableName, duplicatesDictionary);
+            // Выполняем обновление
+            await _mediator.Send(new UpdateDuplicatesCommand(tableName, duplicatesDictionary, columnInfoList));
 
-            // Возвращаем успешный ответ
-            return Ok(new { Message = "Дубликаты успешно обработаны", TableName = tableName });
+            return Ok(new { Message = "Дубликаты успешно обновлены", TableName = tableName });
         }
         catch (Exception ex)
         {
-            // Логирование ошибки
             Console.WriteLine($"Ошибка: {ex.Message}");
             return StatusCode(500, new { Message = "Произошла ошибка при обработке дубликатов", Error = ex.Message });
         }
@@ -102,5 +110,30 @@ public class FileController: ControllerBase
             var result = await _mediator.Send(command, cancellationToken);
             return Ok(result);
         }
+    }
+    
+    private Dictionary<string, object> NormalizeJsonDictionary(JToken item)
+    {
+        return item.Children<JProperty>()
+            .ToDictionary(
+                prop => prop.Name,
+                prop => GetValueFromToken(prop.Value)
+            );
+    }
+    
+    private object GetValueFromToken(JToken token)
+    {
+        return token.Type switch
+        {
+            JTokenType.Integer => token.ToObject<int>(),
+            JTokenType.Float => token.ToObject<double>(),
+            JTokenType.String => token.ToObject<string>(),
+            JTokenType.Boolean => token.ToObject<bool>(),
+            JTokenType.Date => token.ToObject<DateTime>(),
+            JTokenType.Null => null,
+            JTokenType.Object => token.ToObject<Dictionary<string, object>>(),
+            JTokenType.Array => token.ToObject<List<object>>(),
+            _ => token.ToString()
+        };
     }
 }

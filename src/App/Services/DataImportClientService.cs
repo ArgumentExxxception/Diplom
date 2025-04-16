@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.Json;
 using App.Interfaces;
+using Blazored.LocalStorage;
 using Core.Models;
 using Core.Results;
 using Microsoft.AspNetCore.Components.Forms;
@@ -11,125 +12,136 @@ using JsonSerializer = Newtonsoft.Json.JsonSerializer;
 
 namespace App.Services;
 
-public class DataImportClientService: IDataImportClientService
+public class DataImportClientService: HttpClientBase,IDataImportClientService
 {
-    private readonly HttpClient _httpClient;
-    private readonly JsonSerializerOptions _jsonOptions;
-
-    public DataImportClientService(HttpClient httpClient)
+    public DataImportClientService(
+        HttpClient httpClient,
+        ILocalStorageService localStorage,
+        ErrorHandlingService errorHandler) 
+        : base(httpClient, localStorage, errorHandler)
     {
-        _httpClient = httpClient;
-        _jsonOptions = new JsonSerializerOptions 
-        { 
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false
-        };
     }
 
-    public async Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates)
+    public async Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates, List<ColumnInfo> columns)
     {
         try
         {
-            // Создаем контейнер для multipart/form-data
+            // Преобразуем дубликаты, нормализуя значения.
+            var normalizedDuplicates = NormalizeDuplicates(duplicates);
+            var duplicatesJson = JsonConvert.SerializeObject(normalizedDuplicates);
+        
             using var content = new MultipartFormDataContent();
 
-            // Сериализуем данные о дубликатах в JSON
-            var duplicatesJson = JsonConvert.SerializeObject(duplicates);
             var duplicatesContent = new StringContent(duplicatesJson, Encoding.UTF8, "application/json");
             content.Add(duplicatesContent, "duplicates");
 
-            // Добавляем имя таблицы в запрос
             var tableNameContent = new StringContent(tableName, Encoding.UTF8, "text/plain");
             content.Add(tableNameContent, "tableName");
 
-            // Отправляем запрос на сервер
-            // var responseMessage = await _httpClient.PostAsync("/api/File/update-duplicates", content);
-            //
-            // if (!responseMessage.IsSuccessStatusCode)
-            // {
-            //     var error = await responseMessage.Content.ReadAsStringAsync();
-            //     throw new Exception($"Ошибка при обновлении дубликатов: {responseMessage.StatusCode}, {error}");
-            // }
-            //
-            // // Если нужно, можно прочитать ответ от сервера
-            // var response = await responseMessage.Content.ReadAsStringAsync();
-            // Console.WriteLine($"Ответ от сервера: {response}");
+            var columnsJson = JsonConvert.SerializeObject(columns);
+            var columnsContent = new StringContent(columnsJson, Encoding.UTF8, "application/json");
+            content.Add(columnsContent, "columns");
+
+            await SetAuthHeaderAsync();
+            var response = await _httpClient.PostAsync("api/File/update-duplicates", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await _errorHandler.HandleHttpErrorResponse(response);
+                _errorHandler.ShowErrorMessage($"Ошибка при обновлении дубликатов: {response.ReasonPhrase}");
+            }
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Console.WriteLine(e);
-            throw;
+            _errorHandler.HandleException(ex);
+            _errorHandler.ShowErrorMessage($"Произошла ошибка при обновлении дубликатов: {ex.Message}");
         }
     }
+    
+    private List<Dictionary<string, object>> NormalizeDuplicates(List<Dictionary<string, object>> duplicates)
+    {
+        return duplicates.Select(dict =>
+            dict.ToDictionary(
+                kvp => kvp.Key,
+                kvp => NormalizeValue(kvp.Value)
+            )
+        ).ToList();
+    }
+    
+    private object NormalizeValue(object value)
+    {
+        // Если значение не является JsonElement — возвращаем как есть.
+        if (!(value is System.Text.Json.JsonElement jsonElement))
+            return value;
 
-    // public async Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest, CancellationToken cancellationToken = default)
-    // {
-    //     const long maxFileSize = 1_073_741_824; // 1GB
-    //     if (file.Size > maxFileSize)
-    //     {
-    //         throw new InvalidOperationException($"Размер файла превышает максимально допустимый размер {maxFileSize / (1024 * 1024)} МБ");
-    //     }
-    //         
-    //     // Создаем multipart form content
-    //     using var content = new MultipartFormDataContent();
-    //         
-    //     // Читаем файл в память
-    //     using var fileStream = file.OpenReadStream(maxAllowedSize: maxFileSize);
-    //     using var memoryStream = new MemoryStream();
-    //     await fileStream.CopyToAsync(memoryStream, cancellationToken);
-    //     memoryStream.Position = 0;
-    //         
-    //     // Добавляем файл в форму
-    //     var fileContent = new ByteArrayContent(memoryStream.ToArray());
-    //     fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
-    //     content.Add(fileContent, "file", file.Name);
-    //         
-    //     // Сериализуем и добавляем параметры импорта
-    //     var importRequestJson = JsonSerializer.Serialize(importRequest, _jsonOptions);
-    //     content.Add(new StringContent(importRequestJson), "importRequest");
-    //         
-    //     // Отправляем запрос
-    //     var response = await _httpClient.PostAsync("api/tables/import", content, cancellationToken);
-    //         
-    //     // Обрабатываем ответ
-    //     if (!response.IsSuccessStatusCode)
-    //     {
-    //         var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-    //         throw new HttpRequestException($"Ошибка импорта со статусом {response.StatusCode}: {errorContent}");
-    //     }
-    //         
-    //     return await response.Content.ReadFromJsonAsync<ImportResult>(_jsonOptions, cancellationToken) 
-    //            ?? throw new JsonException("Не удалось десериализовать ответ");
-    // }
+        // В зависимости от типа JsonElement извлекаем нужное значение
+        switch (jsonElement.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.Number:
+                // Пробуем вернуть число как int или double 
+                if (jsonElement.TryGetInt32(out int intValue))
+                    return intValue;
+                if (jsonElement.TryGetDouble(out double doubleValue))
+                    return doubleValue;
+                return jsonElement.ToString(); // fallback
+            case System.Text.Json.JsonValueKind.String:
+                return jsonElement.GetString();
+            case System.Text.Json.JsonValueKind.True:
+                return true;
+            case System.Text.Json.JsonValueKind.False:
+                return false;
+            case System.Text.Json.JsonValueKind.Null:
+                return null;
+            // Если объект или массив — можно конвертировать в строку или оставить по необходимости:
+            default:
+                return jsonElement.ToString();
+        }
+    }
+    
     public async Task<ImportResult> ImportData(IBrowserFile file, TableImportRequestModel importRequest, CancellationToken cancellationToken = default)
     {
         try
         {
+            // Проверка файла
+            if (file == null || file.Size == 0)
+            {
+                _errorHandler.ShowErrorMessage("Файл не был предоставлен или пуст");
+                return new ImportResult { Success = false, Message = "Файл не был предоставлен или пуст" };
+            }
+            
+            // Подготовка содержимого для multipart-запроса
             using var content = new MultipartFormDataContent();
-
+            
             // Добавляем файл
             var fileContent = new StreamContent(file.OpenReadStream(long.MaxValue));
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
             content.Add(fileContent, "file", file.Name);
 
-            // Сериализуем importRequest и добавляем как строку с именем "importRequestJson"
+            // Добавляем параметры импорта
             var importRequestJson = System.Text.Json.JsonSerializer.Serialize(importRequest);
             content.Add(new StringContent(importRequestJson, Encoding.UTF8, "application/json"), "importRequestJson");
 
+            // Устанавливаем заголовок авторизации
+            await SetAuthHeaderAsync();
+            
+            // Отправляем запрос
             var response = await _httpClient.PostAsync("api/File/import", content, cancellationToken);
-
+            
+            // Обрабатываем ошибки
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync(cancellationToken);
-                throw new Exception($"Ошибка импорта: {error}");
+                await _errorHandler.HandleHttpErrorResponse(response);
+                return new ImportResult { Success = false, Message = $"Ошибка импорта: {response.ReasonPhrase}" };
             }
-
-            return await response.Content.ReadFromJsonAsync<ImportResult>(cancellationToken: cancellationToken);
+            
+            // Десериализуем ответ
+            return await response.Content.ReadFromJsonAsync<ImportResult>(cancellationToken: cancellationToken) 
+                   ?? new ImportResult { Success = false, Message = "Не удалось обработать ответ сервера" };
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка при импорте: {ex.Message}");
-            throw;
+            _errorHandler.HandleException(ex);
+            return new ImportResult { Success = false, Message = $"Ошибка при импорте: {ex.Message}" };
         }
     }
 }

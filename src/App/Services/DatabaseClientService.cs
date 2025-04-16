@@ -1,55 +1,55 @@
 using App.Interfaces;
+using Blazored.LocalStorage;
 using Core.Models;
+using Domain.Entities;
 
 namespace App.Services;
 
-public class DatabaseClientService : IDatabaseClientService
+public class DatabaseClientService : HttpClientBase,IDatabaseClientService
 {
-    private readonly HttpClient _httpClient;
-
-    public DatabaseClientService(HttpClient httpClient)
+    public DatabaseClientService(
+        HttpClient httpClient,
+        ILocalStorageService localStorage,
+        ErrorHandlingService errorHandler) 
+        : base(httpClient, localStorage, errorHandler)
     {
-        _httpClient = httpClient;
     }
 
     public async Task<List<TableModel>> GetPublicTablesAsync()
     {
         try
         {
-            var response = await _httpClient.GetAsync("api/tables/public");
-        
-            if (!response.IsSuccessStatusCode)
-            {
-                return new List<TableModel>();
-            }
-        
-            return await response.Content.ReadFromJsonAsync<List<TableModel>>() ?? new List<TableModel>();
+            return await GetAsync<List<TableModel>>("api/tables/public");
         }
-        catch (Exception ex)
+        catch
         {
-            // Логирование ошибки
-            Console.WriteLine($"Ошибка при получении публичных таблиц: {ex.Message}");
+            // Ошибка уже обработана в базовом классе HttpClientBase
             return new List<TableModel>();
         }
     }
-    
+
+    public async Task<List<ImportColumnsMetadataModel>> GetTablesMetadataAsync()
+    {
+        try
+        {
+            return await GetAsync<List<ImportColumnsMetadataModel>>("api/tables/metadata");
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
+    }
+
     public async Task<string> CreateTablesAsync(TableModel tableModel)
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("api/tables/create", tableModel);
-        
-            if (response.IsSuccessStatusCode)
-            {
-                return await response.Content.ReadAsStringAsync();
-            }
-        
-            // Чтение сообщения об ошибке из ответа
-            var errorMessage = await response.Content.ReadAsStringAsync();
-            return $"Ошибка: {errorMessage}";
+            return await PostAsync<string>("api/tables/create", tableModel);
         }
         catch (Exception ex)
         {
+            // Ошибка уже обработана в базовом классе
             return $"Ошибка при создании таблицы: {ex.Message}";
         }
     }

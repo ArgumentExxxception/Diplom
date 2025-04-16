@@ -56,7 +56,6 @@ public class DatabaseService: IDatabaseService
 
         return tables;
     }
-
     public async Task<List<ColumnInfo>> GetColumnInfoAsync(string tableName)
     {
         // Получаем информацию о колонках для каждой таблицы
@@ -67,13 +66,27 @@ public class DatabaseService: IDatabaseService
             AND table_schema = 'public';";
         
         var columns = await _unitOfWork.ExecuteQueryAsync<ColumnInfoDto>(columnsQuery);
-        // Преобразуем ColumnInfoDto в ColumnInfo
-        var columnInfos = columns.Select(c => new ColumnInfo
+        // Получаем метаданные из нашей новой сущности, сохранённой в appschema
+        // Предполагается, что репозиторий корректно настроен для работы с ImportColumnMetadataEntity
+        var metadataList = await _unitOfWork.ImportColumnMetadatas.GetByTableNameAsync(tableName);
+    
+        // Объединяем базовую информацию с данными из метаданных.
+        // Если для колонки найдены метаданные, используем их; иначе, задаём значения по умолчанию.
+        var columnInfos = columns.Select(c =>
         {
-            Name = c.ColumnName,
-            Type = MapDataType(c.DataType),
-            IsRequired = c.IsNullable == "NO",
-            IsPrimaryKey = false // Можно добавить логику для определения первичного ключа
+            var meta = metadataList.FirstOrDefault(m => 
+                m.ColumnName.Equals(c.ColumnName, StringComparison.OrdinalIgnoreCase));
+        
+            return new ColumnInfo
+            {
+                Name = c.ColumnName,
+                Type = MapDataType(c.DataType),
+                // Приоритет: если есть метаданные, то брать IsRequired оттуда, иначе из information_schema
+                IsRequired = meta != null ? meta.IsRequired : (c.IsNullable.Equals("NO", StringComparison.OrdinalIgnoreCase)),
+                IsPrimaryKey = meta?.IsPrimaryKey ?? false,
+                IsGeoTag = meta?.IsGeoTag ?? false,
+                SearchInDuplicates = meta?.SearchInDuplicates ?? false
+            };
         }).ToList();
         
         return columnInfos;
@@ -138,12 +151,12 @@ public class DatabaseService: IDatabaseService
         foreach (var column in tableModel.Columns)
         {
             query.Append($"{EscapeIdentifier(column.Name)} {(ColumnTypes)column.Type} ");
-            query.Append(column.IsRequired ? "NULL" : "NOT NULL");
+            query.Append(column.IsRequired ? "NOT NULL" : "NULL");
             query.Append(", ");
         }
         
-        query.Append("LastModifiedOn TIMESTAMPTZ NOT NULL DEFAULT NOW(), ");
-        query.Append("LastModifiedBy TEXT NOT NULL, ");
+        query.Append("LastModifiedOn TIMESTAMPTZ NULL DEFAULT NOW(), ");
+        query.Append("LastModifiedBy TEXT NULL, ");
 
         if (!string.IsNullOrEmpty(tableModel.PrimaryKey))
         {

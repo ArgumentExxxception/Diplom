@@ -19,10 +19,12 @@ public class FileHandlerService: IFileHandlerService
     private readonly IXmlImportService _xmlImportService;
     private readonly ICsvImportService _csvImportService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IDataImportRepository _dataImportRepository;
     // private readonly IAppLogger<FileHandlerService> _logger;
     
-    public FileHandlerService(IUnitOfWork unitOfWork, IXmlImportService xmlImportService, ICsvImportService csvImportService)
+    public FileHandlerService(IDataImportRepository dataImportRepository,IUnitOfWork unitOfWork, IXmlImportService xmlImportService, ICsvImportService csvImportService)
     {
+        _dataImportRepository = dataImportRepository;
         _unitOfWork = unitOfWork;
         _xmlImportService = xmlImportService;
         _csvImportService = csvImportService;
@@ -128,7 +130,35 @@ public class FileHandlerService: IFileHandlerService
 
         return result;
     }
-    
+
+    public async Task UpdateDuplicatesAsync(string tableName, List<Dictionary<string, object>> duplicatedRows, List<ColumnInfo> columns,
+        CancellationToken cancellationToken = default)
+    {
+        if (duplicatedRows == null || duplicatedRows.Count == 0)
+            return;
+
+        // Определим по каким колонкам искать дубликаты
+        var searchColumns = columns
+            .Where(c => c.SearchInDuplicates)
+            .Select(c => c.Name)
+            .ToList();
+
+        // Формируем фильтры для удаления (один фильтр на строку)
+        var filters = duplicatedRows.Select(row =>
+            searchColumns.ToDictionary(col => col, col => row[col])
+        ).ToList();
+
+        // Удаляем существующие дубликаты
+        await _dataImportRepository.DeleteDuplicatesAsync(tableName, filters, cancellationToken);
+
+        // Вставляем новые строки
+        await _dataImportRepository.ImportDataBatchAsync(tableName, duplicatedRows, new TableModel
+        {
+            TableName = tableName,
+            Columns = columns
+        });
+    }
+
     private object ConvertJsonElementToPrimitive(object value)
     {
         if (value is JsonElement jsonElement)
@@ -154,45 +184,6 @@ public class FileHandlerService: IFileHandlerService
         }
         return value;
     }
-
-    // public async Task UpdateDublicates(string tableName, List<Dictionary<string, object>> dublicates)
-    // {
-    //     // Получаем существующие данные из таблицы
-    //     var existingData = await _dataImportRepository.GetExistingDataAsync(tableName);
-    //     var columns = await _databaseService.GetColumnInfoAsync(tableName);
-    //     var primaryKeys = columns.Where(x => x.IsPrimaryKey).Select(x => x.Name).ToList();
-    //     
-    //     var convertedDublicates = dublicates
-    //         .Select(row => row.ToDictionary(
-    //             kv => kv.Key,
-    //             kv => ConvertJsonElementToPrimitive(kv.Value)))
-    //         .ToList();
-    //
-    //     // Фильтруем данные, чтобы оставить только дубликаты
-    //     var duplicates = convertedDublicates
-    //         .Where(newData => existingData.Any(existingRow => IsDuplicate(newData, new List<Dictionary<string, object>> { existingRow }, primaryKeys)))
-    //         .ToList();
-    //
-    //     if (!duplicates.Any())
-    //     {
-    //         throw new InvalidOperationException("Дубликаты не найдены.");
-    //     }
-    //
-    //     // Для каждого дубликата находим соответствующую строку и обновляем её
-    //     foreach (var duplicate in duplicates)
-    //     {
-    //         // Находим строку, которую нужно обновить
-    //         var duplicateRow = existingData.FirstOrDefault(existingRow => IsDuplicate(duplicate, new List<Dictionary<string, object>> { existingRow }, primaryKeys));
-    //
-    //         if (duplicateRow == null)
-    //         {
-    //             throw new InvalidOperationException("Дубликат не найден в существующих данных.");
-    //         }
-    //
-    //         // Передаем данные в сервис для выполнения обновлений в транзакции
-    //         await _dataImportRepository.UpdateDuplicatedRows(tableName, new List<Dictionary<string, object>> { duplicate }, primaryKeys, duplicateRow);
-    //     }
-    // }
 
     #region Вспомогательные методы
         /// <summary>

@@ -9,6 +9,7 @@ public class Context: DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<BackgroundTaskEntity> BackgroundTasks { get; set; }
+    public DbSet<ImportColumnMetadataEntity> ImportColumnMetadatas { get; set; }
     public Context(DbContextOptions<Context> options): base(options)
     {
         
