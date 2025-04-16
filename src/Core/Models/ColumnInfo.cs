@@ -9,4 +9,14 @@ public class ColumnInfo
     public bool IsGeoTag { get; set; }
     public bool SearchInDuplicates { get; set; }
     
+    public ColumnInfo Clone() => new ColumnInfo
+    {
+        Name = Name,
+        Type = Type,
+        IsPrimaryKey = IsPrimaryKey,
+        IsRequired = IsRequired,
+        SearchInDuplicates = SearchInDuplicates,
+        IsGeoTag = IsGeoTag
+    };
+    
 }

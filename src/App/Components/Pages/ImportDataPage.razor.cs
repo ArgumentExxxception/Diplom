@@ -25,8 +25,6 @@ public partial class ImportDataPage : ComponentBase
     [Inject] private AuthenticationStateProvider _authStateProvider { get; set; }
     [Inject] private ILocalStorageService _localStorage { get; set; }
     
-    private const long BACKGROUND_PROCESSING_THRESHOLD = 25 * 1024 * 1024;
-    
     private MudTabs _tabs;
     private List<TableModel> _tabels = new();
     private bool isExpanded = false; // По умолчанию панель свернута
@@ -292,6 +290,35 @@ public partial class ImportDataPage : ComponentBase
     {
         return selectedFile != null && (selectedFile.ContentType.Contains("csv") || 
                                         selectedFile.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private async Task OpenEditDialog(ColumnInfo column)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Column", column.Clone() }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true 
+        };
+
+        var dialog = await _dialogService.ShowAsync<ColumnEditDialog>(
+            "Редактирование колонки", 
+            parameters, 
+            options);
+
+        var result = await dialog.Result;
+    
+        if (!result.Canceled && result.Data is ColumnInfo editedColumn)
+        {
+            var index = columns.IndexOf(column);
+            columns[index] = editedColumn;
+            StateHasChanged();
+        }
     }
     
 

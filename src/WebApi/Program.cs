@@ -1,4 +1,5 @@
 using Core;
+using Core.Handlers;
 using Core.Logging;
 using FluentValidation.AspNetCore;
 using Infrastructure;
@@ -15,7 +16,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddMediatR(cfg => 
-    cfg.RegisterServicesFromAssembly(typeof(Core.Handlers.ImportDataCommandHandler).Assembly));
+    cfg.RegisterServicesFromAssembly(typeof(ImportDataCommandHandler).Assembly));
 builder.Services.AddCore();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddCors(options =>
@@ -33,6 +34,8 @@ app.UseExceptionHandling();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
+    app.UseSwagger();
+    app.UseSwaggerUI();
     app.MapOpenApi();
 }
 app.UseHttpsRedirection();

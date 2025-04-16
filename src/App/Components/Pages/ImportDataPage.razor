@@ -141,7 +141,12 @@
                                 <MudTd>@context.SearchInDuplicates</MudTd>
                                 <MudTd>
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="() => RemoveColumn(context)" Color="Color.Error" Size="Size.Small" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   OnClick="@(() => OpenEditDialog(context))"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small" />
                                 </MudTd>
+                                
                             </RowTemplate>
                         </MudTable>
                     </ChildContent>

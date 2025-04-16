@@ -1,0 +1,39 @@
+﻿<MudDialog>
+    <TitleContent>@Column.Name</TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="Column.Name"
+                      Label="Название колонки"
+                      Required="true"
+                      RequiredError="Обязательное поле"
+                      Validation="@(new Func<string, IEnumerable<string>>(ValidateName))"/>
+
+        <MudSelect T="int" @bind-Value="Column.Type" Label="Тип данных" Class="mt-4">
+            <MudSelectItem Value="0">Текст</MudSelectItem>
+            <MudSelectItem Value="1">Число</MudSelectItem>
+            <MudSelectItem Value="2">Дата</MudSelectItem>
+            <MudSelectItem Value="3">Логическое значение</MudSelectItem>
+            <MudSelectItem Value="4">Дробное число</MudSelectItem>
+        </MudSelect>
+
+        <MudCheckBox @bind-Value="Column.IsPrimaryKey"
+                     Label="Первичный ключ"
+                     Class="mt-4"/>
+
+        <MudCheckBox @bind-Value="Column.IsRequired"
+                     Label="Обязательное поле"
+                     Class="mt-4"/>
+
+        <MudCheckBox @bind-Value="Column.SearchInDuplicates"
+                     Label="Использовать при поиске дубликатов"
+                     Class="mt-4"/>
+
+        <MudCheckBox @bind-Value="Column.IsGeoTag"
+                     Label="Геометка"
+                     Class="mt-4"/>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Отмена</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Save" Disabled="@(!IsValid)">Сохранить</MudButton>
+    </DialogActions>
+</MudDialog>
+

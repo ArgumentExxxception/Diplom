@@ -20,7 +20,11 @@ public class AuthController : ControllerBase
     {
         _mediator = mediator;
     }
-
+    /// <summary>
+    ///  Login
+    /// </summary>
+    /// <param name="loginRequest"></param>
+    /// <returns></returns>
     [HttpPost("login")]
     [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
