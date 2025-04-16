@@ -1,16 +1,10 @@
 ﻿using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using System.Text.Json;
-using System.Xml;
 using Core;
 using Core.Errors;
 using Core.Models;
 using Core.Results;
 using Core.ServiceInterfaces;
-using CsvHelper;
-using CsvHelper.Configuration;
-using Domain.Enums;
 
 namespace Infrastructure;
 
@@ -157,32 +151,6 @@ public class FileHandlerService: IFileHandlerService
             TableName = tableName,
             Columns = columns
         });
-    }
-
-    private object ConvertJsonElementToPrimitive(object value)
-    {
-        if (value is JsonElement jsonElement)
-        {
-            switch (jsonElement.ValueKind)
-            {
-                case JsonValueKind.String:
-                    return jsonElement.GetString();
-                case JsonValueKind.Number:
-                    if (jsonElement.TryGetInt32(out int intValue))
-                        return intValue;
-                    if (jsonElement.TryGetDouble(out double doubleValue))
-                        return doubleValue;
-                    break;
-                case JsonValueKind.True:
-                case JsonValueKind.False:
-                    return jsonElement.GetBoolean();
-                case JsonValueKind.Null:
-                    return null;
-                default:
-                    throw new NotSupportedException($"Unsupported JsonValueKind: {jsonElement.ValueKind}");
-            }
-        }
-        return value;
     }
 
     #region Вспомогательные методы

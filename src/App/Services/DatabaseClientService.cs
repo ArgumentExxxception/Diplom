@@ -27,30 +27,4 @@ public class DatabaseClientService : HttpClientBase,IDatabaseClientService
             return new List<TableModel>();
         }
     }
-
-    public async Task<List<ImportColumnsMetadataModel>> GetTablesMetadataAsync()
-    {
-        try
-        {
-            return await GetAsync<List<ImportColumnsMetadataModel>>("api/tables/metadata");
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
-        }
-    }
-
-    public async Task<string> CreateTablesAsync(TableModel tableModel)
-    {
-        try
-        {
-            return await PostAsync<string>("api/tables/create", tableModel);
-        }
-        catch (Exception ex)
-        {
-            // Ошибка уже обработана в базовом классе
-            return $"Ошибка при создании таблицы: {ex.Message}";
-        }
-    }
 }
