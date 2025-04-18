@@ -3,6 +3,7 @@ using Core;
 using Core.DTOs;
 using Core.Models;
 using Core.ServiceInterfaces;
+using Core.Utils;
 using Domain.Enums;
 using Infrastructure.DTOs;
 
@@ -80,7 +81,7 @@ public class DatabaseService: IDatabaseService
     
         // Объединяем базовую информацию с данными из метаданных.
         // Если для колонки найдены метаданные, используем их; иначе, задаём значения по умолчанию.
-        var columnInfos = columns.Select(c =>
+        var columnInfos = columns.Where(x => x.ColumnName != DataProcessingUtils.MODIFIED_BY_COLUMN && x.ColumnName != DataProcessingUtils.MODIFIED_DATE_COLUMN).Select(c =>
         {
             var meta = metadataList.FirstOrDefault(m => 
                 m.ColumnName.Equals(c.ColumnName, StringComparison.OrdinalIgnoreCase));
@@ -178,6 +179,13 @@ public class DatabaseService: IDatabaseService
         {
             query.Append($" COMMENT ON TABLE {EscapeIdentifier(tableModel.TableName)} IS '{tableModel.TableComment}';");
         }
+        
+        query.Append($@"
+        CREATE TRIGGER set_audit_fields_trigger
+        BEFORE INSERT OR UPDATE ON {EscapeIdentifier(tableModel.TableName)}
+        FOR EACH ROW
+        EXECUTE FUNCTION public.set_audit_fields();
+        ");
 
         try
         {

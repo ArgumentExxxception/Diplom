@@ -73,57 +73,58 @@ public class DataImportRepository: IDataImportRepository
         return nested.ToString(); // или throw new InvalidOperationException("Не удалось нормализовать значение фильтра.");
     }
     
-    public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema,
-        CancellationToken cancellationToken = default)
+public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema,
+    string userEmail, CancellationToken cancellationToken = default)
+{
+    if (await _databaseService.GetTableAsync(schema.TableName) == null)
     {
-        if (await _databaseService.GetTableAsync(schema.TableName) == null)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            await _databaseService.CreateTableAsync(schema);
+        cancellationToken.ThrowIfCancellationRequested();
+        
+        await _databaseService.CreateTableAsync(schema);
+        await SaveColumnMetadataAsync(tableName, schema.Columns, cancellationToken);
+    }
+    var connection = (NpgsqlConnection)_dbContext.Database.GetDbConnection();
+    if (connection.State != ConnectionState.Open)
+    {
+        await connection.OpenAsync(cancellationToken);
+    }
+     
+    var allColumns = new List<string>(schema.Columns.Select(c => $"\"{c.Name}\""));
+    allColumns.Add("\"lastmodifiedby\"");
 
-            schema.Columns.Add(new ColumnInfo
-            {
-                Name = DataProcessingUtils.MODIFIED_BY_COLUMN,
-                Type = (int)ColumnTypes.Text,
-                IsRequired = false
-            });
-            // schema.Columns.Add(new ColumnInfo
-            // {
-            //     Name = DataProcessingUtils.MODIFIED_DATE_COLUMN,
-            //     Type = (int)ColumnTypes.Date,
-            //     IsRequired = false
-            // });
-            await SaveColumnMetadataAsync(tableName, schema.Columns, cancellationToken);
+    string columnList = string.Join(", ", allColumns);
+    string copyCommand = $"COPY \"{tableName}\" ({columnList}) FROM STDIN (FORMAT BINARY)";
+
+    await using var writer = await connection.BeginBinaryImportAsync(copyCommand, cancellationToken);
+     
+    foreach (var row in rows)
+    { 
+        await writer.StartRowAsync(cancellationToken);
+        
+        // Записываем значения для стандартных колонок
+        foreach (var column in schema.Columns)
+        {
+            object? value = row.TryGetValue(column.Name, out var v) ? v : null;
+            
+            if (value == null || value is DBNull)
+                await writer.WriteNullAsync(cancellationToken);
+            else
+                await ConvertToNpgsqlType(value, column, writer);
         }
-        var connection = (NpgsqlConnection)_dbContext.Database.GetDbConnection();
-         if (connection.State != ConnectionState.Open)
-         {
-             await connection.OpenAsync(cancellationToken);
-         }
-    
-         string columnList = string.Join(", ", schema.Columns.Select(c => $"\"{c.Name}\""));
-         string copyCommand = $"COPY \"{tableName}\" ({columnList}) FROM STDIN (FORMAT BINARY)";
-    
-         await using var writer = await connection.BeginBinaryImportAsync(copyCommand, cancellationToken);
-         
-         foreach (var row in rows)
-         { 
-             await writer.StartRowAsync(cancellationToken);
-            foreach (var column in schema.Columns)
-            {
-                object? value = row.TryGetValue(column.Name, out var v) ? v : null;
-                
-                if (value == null || value is DBNull)
-                    await writer.WriteNullAsync(cancellationToken);
-                else
-                    await ConvertToNpgsqlType(value, column, writer);
-            }
-         }
-    
-         await writer.CompleteAsync(cancellationToken);
+        
+        // Теперь запишем значение для lastmodifiedby
+        string modifiedBy = userEmail;
+        if (row.ContainsKey("lastmodifiedby") && row["lastmodifiedby"] != null)
+        {
+            modifiedBy = row["lastmodifiedby"].ToString();
+        }
+        
+        // Запись значения lastmodifiedby в поток
+        await writer.WriteAsync(modifiedBy, NpgsqlDbType.Text);
     }
 
+    await writer.CompleteAsync(cancellationToken);
+}
     private async Task ConvertToNpgsqlType(object? value, ColumnInfo column, NpgsqlBinaryImporter writer)
     {
         switch ((ColumnTypes)column.Type)

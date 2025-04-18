@@ -37,6 +37,7 @@ public class FileController: ControllerBase
     {
         try
         {
+            string userName = HttpContext.User.Identity?.Name;
             // Парсим колонки
             var columnInfoList = JsonConvert.DeserializeObject<List<ColumnInfo>>(columns);
             if (columnInfoList == null)
@@ -49,7 +50,7 @@ public class FileController: ControllerBase
                 .ToList();
 
             // Выполняем обновление
-            await _mediator.Send(new UpdateDuplicatesCommand(tableName, duplicatesDictionary, columnInfoList));
+            await _mediator.Send(new UpdateDuplicatesCommand(tableName, duplicatesDictionary, columnInfoList, userName));
 
             return Ok(new { Message = "Дубликаты успешно обновлены", TableName = tableName });
         }

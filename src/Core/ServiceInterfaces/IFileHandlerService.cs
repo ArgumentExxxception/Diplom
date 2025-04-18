@@ -11,5 +11,6 @@ public interface IFileHandlerService
         string tableName,
         List<Dictionary<string, object>> duplicatedRows,
         List<ColumnInfo> columns,
+        string userEmail,
         CancellationToken cancellationToken = default);
 }

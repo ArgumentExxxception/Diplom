@@ -8,7 +8,7 @@ public interface IDataImportRepository
         string tableName,
         List<Dictionary<string, object>> filters,
         CancellationToken cancellationToken = default);
-    Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema, CancellationToken cancellationToken = default);
+    Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema, string userEmail, CancellationToken cancellationToken = default);
     Task ClearTableAsync(string tableName, CancellationToken cancellationToken = default);
     Task<List<Dictionary<string, object>>> GetExistingDataAsync(string tableName, CancellationToken cancellationToken = default);
 }

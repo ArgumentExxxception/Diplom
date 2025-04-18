@@ -14,7 +14,7 @@ public class UpdateDublicatesCommandHandler: IRequestHandler<UpdateDuplicatesCom
     
     public async Task<string> Handle(UpdateDuplicatesCommand request, CancellationToken cancellationToken)
     {
-        await _fileHandlerService.UpdateDuplicatesAsync(request.TableName, request.Duplicates, request.ColumnInfoList, cancellationToken);
+        await _fileHandlerService.UpdateDuplicatesAsync(request.TableName, request.Duplicates, request.ColumnInfoList, request.UserEmail, cancellationToken);
         return "Дубликаты успешно обновлены";
     }
 }
