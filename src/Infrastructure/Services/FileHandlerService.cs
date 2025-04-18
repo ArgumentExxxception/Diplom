@@ -150,7 +150,7 @@ public class FileHandlerService: IFileHandlerService
         {
             TableName = tableName,
             Columns = columns
-        });
+        }, cancellationToken);
     }
 
     #region Вспомогательные методы

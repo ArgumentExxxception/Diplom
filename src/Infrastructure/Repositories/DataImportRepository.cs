@@ -1,10 +1,14 @@
 ﻿using System.Data;
-using System.Text;
+using System.Globalization;
 using Core;
 using Core.Models;
+using Core.ServiceInterfaces;
+using Core.Utils;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace Infrastructure;
 
@@ -69,80 +73,162 @@ public class DataImportRepository: IDataImportRepository
         return nested.ToString(); // или throw new InvalidOperationException("Не удалось нормализовать значение фильтра.");
     }
     
-    public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema, CancellationToken cancellationToken = default)
+    public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema,
+        CancellationToken cancellationToken = default)
     {
-        if (rows.Count == 0)
-            return;
-        cancellationToken.ThrowIfCancellationRequested();
-        
-        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
+        if (await _databaseService.GetTableAsync(schema.TableName) == null)
         {
-            List<TableModel> tables = await _databaseService.GetPublicTablesAsync();
-
-            if (tables.All(table => table.TableName != tableName))
-            {
-                await _databaseService.CreateTableAsync(schema);
-                schema.Columns.Add(new ColumnInfo
-                {
-                    Name = "lastmodifiedon",
-                    Type = (int)ColumnTypes.Date,
-                    IsRequired = false
-                });
-
-                schema.Columns.Add(new ColumnInfo
-                {
-                    Name = "lastmodifiedby",
-                    Type = (int)ColumnTypes.Text,
-                    IsRequired = false
-                });
-                await SaveColumnMetadataAsync(tableName, schema.Columns);
-            }
-
-            // Подготавливаем SQL запрос для вставки данных
-            StringBuilder insertSql = new StringBuilder();
-            insertSql.Append($"INSERT INTO \"{tableName}\" (");
-
-            // Получаем имена колонок
-            var columnNames = schema.Columns.Select(c => $"\"{c.Name}\"").ToList();
+            cancellationToken.ThrowIfCancellationRequested();
             
-            insertSql.Append(string.Join(", ", columnNames));
-            insertSql.Append(") VALUES ");
+            await _databaseService.CreateTableAsync(schema);
 
-            // Добавляем параметры для каждой строки
-            List<object> parameters = new List<object>();
-            for (int i = 0; i < rows.Count; i++)
+            schema.Columns.Add(new ColumnInfo
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (i > 0)
-                    insertSql.Append(", ");
-
-                insertSql.Append("(");
-                List<string> rowParams = new List<string>();
-
-                // Добавляем параметры для каждой колонки
-                foreach (ColumnInfo column in schema.Columns)
-                {
-                    string paramName = $"@p{parameters.Count}";
-                    rowParams.Add(paramName);
-
-                    // Получаем значение или NULL, если его нет
-                    object value = rows[i].TryGetValue(column.Name, out var v) ? v : null;
-                    parameters.Add(value);
-                }
-                
-                insertSql.Append(string.Join(", ", rowParams));
-                insertSql.Append(")");
-            }
-
-            // Выполняем запрос
-            await _dbContext.Database.ExecuteSqlRawAsync(insertSql.ToString(), parameters.ToArray());
-            await transaction.CommitAsync(cancellationToken);
+                Name = DataProcessingUtils.MODIFIED_BY_COLUMN,
+                Type = (int)ColumnTypes.Text,
+                IsRequired = false
+            });
+            // schema.Columns.Add(new ColumnInfo
+            // {
+            //     Name = DataProcessingUtils.MODIFIED_DATE_COLUMN,
+            //     Type = (int)ColumnTypes.Date,
+            //     IsRequired = false
+            // });
+            await SaveColumnMetadataAsync(tableName, schema.Columns, cancellationToken);
         }
-        catch (Exception ex)
+        var connection = (NpgsqlConnection)_dbContext.Database.GetDbConnection();
+         if (connection.State != ConnectionState.Open)
+         {
+             await connection.OpenAsync(cancellationToken);
+         }
+    
+         string columnList = string.Join(", ", schema.Columns.Select(c => $"\"{c.Name}\""));
+         string copyCommand = $"COPY \"{tableName}\" ({columnList}) FROM STDIN (FORMAT BINARY)";
+    
+         await using var writer = await connection.BeginBinaryImportAsync(copyCommand, cancellationToken);
+         
+         foreach (var row in rows)
+         { 
+             await writer.StartRowAsync(cancellationToken);
+            foreach (var column in schema.Columns)
+            {
+                object? value = row.TryGetValue(column.Name, out var v) ? v : null;
+                
+                if (value == null || value is DBNull)
+                    await writer.WriteNullAsync(cancellationToken);
+                else
+                    await ConvertToNpgsqlType(value, column, writer);
+            }
+         }
+    
+         await writer.CompleteAsync(cancellationToken);
+    }
+
+    private async Task ConvertToNpgsqlType(object? value, ColumnInfo column, NpgsqlBinaryImporter writer)
+    {
+        switch ((ColumnTypes)column.Type)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw new Exception($"Ошибка при импорте данных в таблицу {tableName}: {ex.Message}", ex);
+            case ColumnTypes.Text:
+                await writer.WriteAsync(value?.ToString(), NpgsqlDbType.Text);
+                break;
+            case ColumnTypes.Integer:
+                await writer.WriteAsync(Convert.ToInt32(value), NpgsqlDbType.Integer);
+                break;
+            case ColumnTypes.Double:
+                if (value is double d)
+                    await writer.WriteAsync(d, NpgsqlDbType.Double);
+                else if (value is float f)
+                    await writer.WriteAsync((double)f, NpgsqlDbType.Double);
+                else if (value is decimal dec)
+                    await writer.WriteAsync(dec, NpgsqlDbType.Numeric);
+                else
+                    await writer.WriteAsync(Convert.ToDouble(value), NpgsqlDbType.Double);
+                break;
+            case ColumnTypes.Date:
+            {
+                // Null-значения уже обработаны выше
+                DateTime dateValue;
+
+                switch (value)
+                {
+                    case DateTime dt:
+                        dateValue = dt.Date;
+                        break;
+
+                    case DateTimeOffset dto:
+                        dateValue = dto.Date; 
+                        break;
+
+                    case string s:
+                        // Попытаться спарсить как ISO-8601 или общий формат
+                        if (!DateTime.TryParse(
+                                s,
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                                out dateValue))
+                        {
+                            throw new FormatException($"Не удалось распознать дату из строки: '{s}'");
+                        }
+                        dateValue = dateValue.Date;
+                        break;
+
+                    case long l:
+                        // Unix-время в секундах
+                        dateValue = DateTimeOffset.FromUnixTimeSeconds(l)
+                                                  .UtcDateTime
+                                                  .Date;
+                        break;
+
+                    case double dbl:
+                        // интерпретируем как Unix-время (если больше 1_000_000_000) 
+                        // или как OLE Automation Date (если меньше)
+                        if (Math.Abs(dbl) > 1_000_000_000)
+                        {
+                            dateValue = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dbl))
+                                                      .UtcDateTime
+                                                      .Date;
+                        }
+                        else
+                        {
+                            dateValue = DateTime.FromOADate(dbl).Date;
+                        }
+                        break;
+
+                    case float f:
+                        dateValue = DateTime.FromOADate(f).Date;
+                        break;
+
+                    case decimal dec:
+                        dateValue = DateTime.FromOADate((double)dec).Date;
+                        break;
+
+                    default:
+                        // Попытаться конвертировать через ToString()
+                        if (DateTime.TryParse(
+                                value.ToString(),
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.None,
+                                out dateValue))
+                        {
+                            dateValue = dateValue.Date;
+                        }
+                        else
+                        {
+                            throw new InvalidCastException(
+                                $"Невозможно сконвертировать значение '{value}' в дату.");
+                        }
+                        break;
+                }
+
+                await writer.WriteAsync(dateValue, NpgsqlDbType.Date);
+                break;
+            }
+            case ColumnTypes.Boolean:
+                await writer.WriteAsync(Convert.ToBoolean(value), NpgsqlDbType.Boolean);
+                break;
+            default:
+                await writer.WriteAsync(value!.ToString(), NpgsqlDbType.Text);
+                break;
         }
     }
 
@@ -163,7 +249,6 @@ public class DataImportRepository: IDataImportRepository
 
             await _unitOfWork.ImportColumnMetadatas.Add(metadata);
         }
-        await _unitOfWork.SaveChangesAsync();
     }
 
     public async Task ClearTableAsync(string tableName, CancellationToken cancellationToken = default)

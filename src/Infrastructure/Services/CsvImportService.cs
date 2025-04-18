@@ -79,7 +79,7 @@ public async Task ProcessCSVFileAsync(
                 var rowData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 bool rowHasErrors = false;
 
-                for (int i = 0; i < importRequest.Columns.Where(x => x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN).Count(); i++)
+                for (int i = 0; i < importRequest.Columns.Count(x => x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && x.Name != DataProcessingUtils.MODIFIED_DATE_COLUMN); i++)
                 {
                     var column = importRequest.Columns[i];
                     string value = csv.GetField(i);
@@ -175,7 +175,7 @@ public async Task ProcessCSVFileAsync(
             // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
-                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, cancellationToken);
             }
             importResult.RowsUpdated = importResult.RowsProcessed - importResult.RowsInserted - importResult.RowsSkipped - importResult.ErrorCount;
         }

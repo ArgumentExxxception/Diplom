@@ -96,8 +96,7 @@ public class XmlImportService: IXmlImportService
                     }
 
                     importResult.RowsProcessed++;
-
-                    // Пакетная обработка для экономии памяти
+                    
                     if (rowsToImport.Count >= 1000)
                     {
                         await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
@@ -108,10 +107,9 @@ public class XmlImportService: IXmlImportService
             
             importResult.DuplicatedRows = duplicatedRows;
             
-            // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
-                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName }, cancellationToken);
             }
             importResult.RowsUpdated = importResult.RowsProcessed - importResult.RowsInserted - importResult.RowsSkipped - importResult.ErrorCount;
         }
@@ -123,7 +121,7 @@ public class XmlImportService: IXmlImportService
             //     // RowNumber = rowIndex,
             //     ErrorMessage = $"Ошибка при обработке XML: {ex.Message}"
             // });
-            throw new Exception();
+            throw new Exception(ex.Message);
         }
     }
     

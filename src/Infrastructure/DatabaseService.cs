@@ -2,6 +2,7 @@ using System.Text;
 using Core;
 using Core.DTOs;
 using Core.Models;
+using Core.ServiceInterfaces;
 using Domain.Enums;
 using Infrastructure.DTOs;
 
@@ -56,6 +57,13 @@ public class DatabaseService: IDatabaseService
 
         return tables;
     }
+
+    public async Task<TableModel?> GetTableAsync(string tableName)
+    {
+        List<TableModel> tables = await GetPublicTablesAsync();
+        return tables.Find(t => t.TableName == tableName) ?? null;
+    }
+
     public async Task<List<ColumnInfo>> GetColumnInfoAsync(string tableName)
     {
         // Получаем информацию о колонках для каждой таблицы
@@ -181,26 +189,6 @@ public class DatabaseService: IDatabaseService
             throw new InvalidOperationException("Не удалось создать таблицу. Подробности см. в логах.", ex);
         }
 
-    }
-    
-    private object ConvertValue(string value)
-    {
-        if (int.TryParse(value, out var intValue))
-        {
-            return intValue;
-        }
-        if (DateTime.TryParse(value, out var dateValue))
-        {
-            return dateValue;
-        }
-        return value;
-    }
-
-    private async Task AddEntityToDatabase(Dictionary<string, object> entity)
-    {
-        var tableName = "YourTableName"; // Имя таблицы (можно сделать динамическим)
-        var sqlQuery = $"INSERT INTO {tableName} ({string.Join(", ", entity.Keys)}) VALUES ({string.Join(", ", entity.Values)})";
-        await _unitOfWork.ExecuteQueryAsync<string>(sqlQuery);
     }
     
     private string EscapeIdentifier(string identifier)

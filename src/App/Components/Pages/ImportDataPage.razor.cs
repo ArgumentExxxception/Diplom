@@ -154,7 +154,7 @@ public partial class ImportDataPage : ComponentBase
                 if (importResult.Success)
                 {
                     _snackbar.Add("Импорт данных успешно завершен", Severity.Success);
-                    if (importResult.DuplicatedRows is { Count: > 0 })
+                    if (importResult?.DuplicatedRows is { Count: > 0 })
                     {
                         await HandleDuplicateRows(importRequest.TableName,importResult.DuplicatedRows,importRequest.Columns);
                     }
