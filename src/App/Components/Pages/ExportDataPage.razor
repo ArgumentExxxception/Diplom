@@ -1,0 +1,129 @@
+﻿@page "/export-data"
+@using Core.Models
+@using Domain.Enums
+@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+<PageTitle>Экспорт данных</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Экспорт данных</MudText>
+
+    <MudCard Elevation="4" Class="mb-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Выбор таблицы и параметров экспорта</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="string" Label="Таблица" @bind-Value="selectedTable" Required="true"
+                               HelperText="Выберите таблицу для экспорта данных"
+                               AdornmentIcon="@Icons.Material.Filled.Storage" AdornmentColor="Color.Primary"
+                               SelectedValuesChanged="@(async () => await LoadTableStructure(selectedTable))">
+                        @foreach (var table in availableTables)
+                        {
+                            <MudSelectItem Value="@table">@table</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_selectedTableComment" ReadOnly="true" Label="Комментарий к таблице" Variant="Variant.Outlined" Class="mb-4" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="ExportFormat" Label="Формат экспорта" @bind-Value="exportFormat" Required="true"
+                               HelperText="Выберите формат экспорта данных"
+                               AdornmentIcon="@Icons.Material.Filled.Description" AdornmentColor="Color.Primary">
+                        <MudSelectItem Value="ExportFormat.CSV">CSV</MudSelectItem>
+                        <MudSelectItem Value="ExportFormat.XML">XML</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                
+                @if (exportFormat == ExportFormat.CSV)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="csvDelimiter" Label="Разделитель" Required="true"
+                                     HelperText="Символ-разделитель для CSV"
+                                     Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox @bind-Value="includeHeaders" Label="Включать заголовки" Color="Color.Primary" />
+                    </MudItem>
+                }
+                
+                @if (exportFormat == ExportFormat.XML)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="xmlRootElement" Label="Корневой элемент XML"
+                                     HelperText="Название корневого элемента XML"
+                                     Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="xmlRowElement" Label="Элемент строки XML"
+                                     HelperText="Название элемента, представляющего строку данных"
+                                     Variant="Variant.Outlined" />
+                    </MudItem>
+                }
+                
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="filterCondition" Label="Условие фильтрации" 
+                                 HelperText="SQL условие WHERE для фильтрации данных (без слова WHERE)"
+                                 Variant="Variant.Outlined" />
+                </MudItem>
+                
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="int" @bind-Value="maxRows" Label="Максимальное число строк"
+                                   HelperText="0 - без ограничений"
+                                   Min="0" Variant="Variant.Outlined" />
+                </MudItem>
+
+                <MudExpansionPanel bind-Expanded="@isExpanded" ExpandedChanged="OnExpandedChanged" Class="mb-4 mt-4">
+                    <TitleContent>
+                        <MudText Typo="Typo.h6">Выбор колонок для экспорта</MudText>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudText Class="mb-2">Если не выбрано ни одной колонки, будут экспортированы все колонки.</MudText>
+                        
+                        <MudTable Items="@tableStructure" Hover="true" Striped="true" Bordered="true">
+                            <HeaderContent>
+                                <MudTh Style="width: 50px;"></MudTh>
+                                <MudTh>Имя колонки</MudTh>
+                                <MudTh>Тип данных</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>
+                                    <MudCheckBox T="bool" Checked="@(selectedColumns.Contains(context.Name))" 
+                                                ValueChanged="@(value => ToggleColumnSelection(context.Name, value))" />
+                                </MudTd>
+                                <MudTd DataLabel="Имя колонки">@context.Name</MudTd>
+                                <MudTd DataLabel="Тип данных">@((Domain.Enums.ColumnTypes)context.Type)</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudGrid>
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="@(async () => await StartExport())"
+                       Disabled="@(!CanStartExport() || isExporting)"
+                       StartIcon="@Icons.Material.Filled.Download">
+                @(isExporting ? "Экспорт..." : "Экспортировать")
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       OnClick="ResetForm"
+                       Disabled="@isExporting"
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Сбросить
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+    
+    @if (isExporting)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        <MudText>Выполняется экспорт данных...</MudText>
+    }
+</MudContainer>

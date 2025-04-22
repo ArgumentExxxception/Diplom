@@ -239,7 +239,7 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
     public async Task ClearTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var sql = $"DELETE FROM \"{tableName}\"";
+        var sql = $"TRUNCATE \"{tableName}\"";
         await _dbContext.Database.ExecuteSqlRawAsync(sql,cancellationToken);
     }
     

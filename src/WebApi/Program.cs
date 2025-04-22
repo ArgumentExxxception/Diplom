@@ -4,6 +4,7 @@ using Core.Logging;
 using FluentValidation.AspNetCore;
 using Infrastructure;
 using Infrastructure.Logging;
+using Microsoft.AspNetCore.Http.Features;
 using WebApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,6 +29,12 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
 builder.Services.AddFluentValidationAutoValidation();
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = long.MaxValue;
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
+});
 var app = builder.Build();
 
 app.UseExceptionHandling();
