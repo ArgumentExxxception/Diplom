@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Core.Commands;
 using Core.Models;
 using Core.Queries;
@@ -21,6 +22,10 @@ public class TablesController: ControllerBase
     public async Task<ActionResult<List<TableModel>>> GetPublicTables()
     {
         var tables = await _mediator.Send(new GetPublicTablesQuery());
+        foreach (var claim in User.Claims)
+        {
+            Debug.Print($"{claim.Type}: {claim.Value}");
+        }
         return Ok(tables);
     }
 }

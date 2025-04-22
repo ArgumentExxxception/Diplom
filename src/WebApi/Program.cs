@@ -21,11 +21,15 @@ builder.Services.AddCore();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowBlazor", policy =>
+    options.AddPolicy("AllowBlazorClient", policy =>
+    {
         policy.WithOrigins("http://localhost:5024")
-            .AllowAnyMethod()
-            .AllowAnyHeader());
+            .AllowCredentials()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
 });
+
 builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
 builder.Services.AddFluentValidationAutoValidation();
 var app = builder.Build();
@@ -41,8 +45,17 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseRouting();
-app.UseCors("AllowBlazor");
+app.UseCors("AllowBlazorClient");
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var accessToken = context.Request.Cookies["access_token"];
+    if (!string.IsNullOrWhiteSpace(accessToken))
+    {
+        context.Request.Headers.Authorization = $"Bearer {accessToken}";
+    }
+    await next();
+});
 app.UseAuthorization();
 app.MapControllers();
 

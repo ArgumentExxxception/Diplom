@@ -1,4 +1,6 @@
 ﻿@page "/"
+@using global::App.Interfaces
+@inject IAuthClientService auth
 
 <PageTitle>Home</PageTitle>
 
@@ -11,6 +13,8 @@
         <b>www.mudblazor.com</b>
     </MudLink>
 </MudAlert>
+
+<MudButton Variant="Variant.Filled" OnClick="() => auth.Test()"></MudButton>
 
 <br />
 <MudText Typo="Typo.h5" GutterBottom="true">Interactivity in this Template</MudText>

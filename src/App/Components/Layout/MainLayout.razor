@@ -1,6 +1,7 @@
 ﻿@using global::App.Interfaces
-@using global::App.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @inherits LayoutComponentBase
+
 @inject IAuthClientService _authClientService
 @inject ISnackbar _Snackbar
 @inject NavigationManager _NavigationManager
@@ -12,10 +13,10 @@
 <MudSnackbarProvider />
 <MudLayout>
     <MudAppBar Elevation="1">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="DrawerToggle" />
         <MudText Typo="Typo.h5" Class="ml-3">Сервис импорта и предобработки разнородных данных</MudText>
         <MudSpacer />
-        <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
+        <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="DarkModeToggle" />
         @if (_isAuthenticated)
         {
             <MudButton 
@@ -38,9 +39,11 @@
         }
         <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
     </MudAppBar>
+
     <MudDrawer id="nav-drawer" @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu />
     </MudDrawer>
+
     <MudMainContent Class="mt-16 pa-4">
         @Body
     </MudMainContent>
@@ -63,26 +66,17 @@
     private MudTheme? _theme = null;
     private bool _isAuthenticated = false;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        base.OnInitialized();
-
         _theme = new()
         {
             PaletteLight = _lightPalette,
             PaletteDark = _darkPalette,
             LayoutProperties = new LayoutProperties()
         };
-    }
 
-    protected async override void OnAfterRender(bool firstRender)
-    {
-        if (firstRender)
-        {
-            var authState = await ((CustomAuthStateProvider)_authenticationStateProvider).GetAuthenticationStateAsync();
-            _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
-            StateHasChanged();
-        }
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
     }
 
     private async Task Logout()
@@ -154,5 +148,3 @@
         false => Icons.Material.Outlined.DarkMode,
     };
 }
-
-

@@ -1,11 +1,10 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using App.Components.Dialogs;
 using App.Interfaces;
-using Blazored.LocalStorage;
 using Core;
 using Core.Models;
 using Core.Results;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
@@ -13,6 +12,7 @@ using MudBlazor;
 
 namespace App.Components.Pages;
 
+[Authorize]
 public partial class ImportDataPage : ComponentBase
 {
     [Inject] private HttpClient _http { get; set; }
@@ -23,7 +23,6 @@ public partial class ImportDataPage : ComponentBase
     [Inject] private ISnackbar Snackbar { get; set; }
     [Inject] private IBackgroundTaskService _backgroundTaskService { get; set; }
     [Inject] private AuthenticationStateProvider _authStateProvider { get; set; }
-    [Inject] private ILocalStorageService _localStorage { get; set; }
     
     private MudTabs _tabs;
     private List<TableModel> _tabels = new();
@@ -59,18 +58,11 @@ public partial class ImportDataPage : ComponentBase
     protected override async Task OnInitializedAsync()
     {
         await LoadAvailableTables();
-        var authState = await _authStateProvider.GetAuthenticationStateAsync();
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        _currentUserEmail = GetEmailFromToken(token);
-        
-    }
-    private string GetEmailFromToken(string token)
-    {
-        var handler = new JwtSecurityTokenHandler();
-        var jwtToken = handler.ReadJwtToken(token);
-        return jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-    }
 
+        var authState = await _authStateProvider.GetAuthenticationStateAsync();
+        _currentUserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+    }
+    
     private async Task LoadAvailableTables()
     {
         try

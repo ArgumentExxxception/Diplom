@@ -5,6 +5,7 @@ using Core.Exceptions;
 using Core.Queries;
 using Core.Results;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.Models;
 
@@ -20,26 +21,33 @@ public class AuthController : ControllerBase
     {
         _mediator = mediator;
     }
-    /// <summary>
-    ///  Login
-    /// </summary>
-    /// <param name="loginRequest"></param>
-    /// <returns></returns>
+    
     [HttpPost("login")]
-    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ApiResponse<LoginResponse>>> Login([FromBody] LoginRequestDto loginRequest)
     {
         var result = await _mediator.Send(new LoginQuery(loginRequest.Username, loginRequest.Password, loginRequest.RememberMe));
-        
+    
         if (!result.Successful)
+            return Unauthorized(ApiResponse<LoginResponse>.Fail(result.Error));
+
+        // access_token cookie
+        Response.Cookies.Append("access_token", result.Token, new CookieOptions
         {
-            // Возвращаем стандартизированный ответ с ошибкой
-            return Unauthorized(ApiResponse<LoginResponse>.Fail(result.Error, StatusCodes.Status401Unauthorized));
-        }
-        
-        // Возвращаем стандартизированный успешный ответ
-        return Ok(ApiResponse<LoginResponse>.SuccessBuild(result, "Вход выполнен успешно"));
+            HttpOnly = true,
+            Secure = true, // ⚠️ обязательно для SameSite=None
+            SameSite = SameSiteMode.None,
+            Expires = DateTime.UtcNow.AddMinutes(15)
+        });
+        // refresh_token cookie
+        Response.Cookies.Append("refresh_token", result.RefreshToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTime.UtcNow.AddDays(7)
+        });
+
+        return Ok(ApiResponse<LoginResponse>.SuccessBuild(result, "Вход выполнен"));
     }
 
     [HttpPost("register")]
@@ -72,18 +80,11 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse>> Logout()
+    public IActionResult Logout()
     {
-        var token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-        
-        if (string.IsNullOrEmpty(token))
-        {
-            return BadRequest(ApiResponse.Fail("Токен авторизации не предоставлен"));
-        }
-        
-        await _mediator.Send(new LogoutQuery(token));
-        return Ok(ApiResponse.Successed("Выход выполнен успешно"));
+        Response.Cookies.Delete("access_token");
+        Response.Cookies.Delete("refresh_token");
+        return Ok(ApiResponse.Successed("Выход выполнен"));
     }
     
     [HttpPost("refresh-token")]
@@ -99,5 +100,14 @@ public class AuthController : ControllerBase
         }
         
         return Ok(ApiResponse<LoginResponse>.SuccessBuild(result, "Токен успешно обновлен"));
+    }
+    
+    [HttpGet("whoami")]
+    public IActionResult WhoAmI()
+    {
+        if (!User.Identity.IsAuthenticated)
+            return Unauthorized("Не аутентифицирован");
+
+        return Ok(User.Claims.Select(c => new { c.Type, c.Value }));
     }
 }
