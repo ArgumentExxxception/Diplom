@@ -6,6 +6,7 @@ using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
 using System.Threading.Tasks;
+using Core.ServiceInterfaces;
 
 namespace Infrastructure.Services
 {
@@ -39,14 +40,12 @@ namespace Infrastructure.Services
             string contentType,
             string userName)
         {
-            // Сохраняем файл во временное хранилище
             var tempFilePath = Path.GetTempFileName();
             using (var tempFile = File.Create(tempFilePath))
             {
                 await fileStream.CopyToAsync(tempFile);
             }
 
-            // Создаем новую задачу
             var task = new BackgroundTask
             {
                 Name = $"Импорт {fileName}",
@@ -65,7 +64,6 @@ namespace Infrastructure.Services
                 }
             };
 
-            // Сохраняем задачу в БД
             using (var scope = _serviceScopeFactory.CreateScope())
             {
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -76,7 +74,6 @@ namespace Infrastructure.Services
             var cts = new CancellationTokenSource();
             _cancellationTokens[task.Id] = cts;
 
-            // Запускаем задачу в фоне
             _ = Task.Run(async () =>
             {
                 try
@@ -93,7 +90,6 @@ namespace Infrastructure.Services
                 }
                 finally
                 {
-                    // Удаляем временный файл после завершения
                     try
                     {
                         if (File.Exists(tempFilePath))
@@ -101,7 +97,6 @@ namespace Infrastructure.Services
                     }
                     catch (Exception ex)
                     {
-                        // Логирование ошибки удаления можно добавить при необходимости
                     }
 
                     _cancellationTokens.Remove(task.Id);
@@ -110,6 +105,157 @@ namespace Infrastructure.Services
 
             return task;
         }
+
+public async Task<BackgroundTask> EnqueueExportTaskAsync(
+    TableExportRequestModel exportRequest,
+    string userName,
+    CancellationToken cancellationToken = default)
+{
+    var task = new BackgroundTask
+    {
+        Name = $"Экспорт таблицы {exportRequest.TableName} в {exportRequest.ExportFormat}",
+        Description = $"Экспорт данных из таблицы {exportRequest.TableName} в формате {exportRequest.ExportFormat}",
+        Status = BackgroundTaskStatus.Pending,
+        TaskType = BackgroundTaskType.Export,
+        UserId = userName,
+        TaskData = new Dictionary<string, object>
+        {
+            { "TableName", exportRequest.TableName },
+            { "ExportFormat", exportRequest.ExportFormat },
+            { "FilterCondition", exportRequest.FilterCondition },
+            { "MaxRows", exportRequest.MaxRows },
+            { "IncludeHeaders", exportRequest.IncludeHeaders },
+            { "Delimiter", exportRequest.Delimiter },
+            { "Encoding", exportRequest.Encoding },
+            { "XmlRootElement", exportRequest.XmlRootElement },
+            { "XmlRowElement", exportRequest.XmlRowElement }
+        }
+    };
+    
+    using (var scope = _serviceScopeFactory.CreateScope())
+    {
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        await unitOfWork.BackgroundTasks.Add(_mapper.Map<BackgroundTask, BackgroundTaskEntity>(task));
+        await unitOfWork.CommitAsync();
+    }
+
+    var cts = new CancellationTokenSource();
+    _cancellationTokens[task.Id] = cts;
+    
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await ExecuteExportTaskAsync(task.Id, exportRequest, userName, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await unitOfWork.BackgroundTasks.FailTaskAsync(task.Id, ex.Message);
+            await unitOfWork.CommitAsync();
+        }
+        finally
+        {
+            _cancellationTokens.Remove(task.Id);
+        }
+    });
+
+    return task;
+}
+
+    private async Task ExecuteExportTaskAsync(
+        Guid taskId,
+        TableExportRequestModel exportRequest,
+        string userName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _semaphore.WaitAsync(cancellationToken);
+
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var fileExportService = scope.ServiceProvider.GetRequiredService<IFileExportService>();
+            
+            await unitOfWork.BackgroundTasks.UpdateStatusAsync(taskId, BackgroundTaskStatus.Running);
+            await unitOfWork.CommitAsync();
+            
+            var updatedTask = await GetTaskByIdAsync(taskId);
+            OnTaskStatusChanged(updatedTask);
+
+            exportRequest.UserEmail = userName;
+            var (result, fileStream) = await fileExportService.ExportDataAsync(exportRequest, cancellationToken);
+            
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var taskEntity = await unitOfWork.BackgroundTasks.GetByIdAsync(taskId);
+            if (taskEntity.CancellationRequested)
+                cancellationToken.ThrowIfCancellationRequested();
+            
+            var tempDir = Path.Combine(Path.GetTempPath(), "ExportTasks");
+            Directory.CreateDirectory(tempDir);
+            var tempFilePath = Path.Combine(tempDir, result.FileName);
+
+            await using (var fileStream2 = File.Create(tempFilePath))
+            {
+                fileStream.Position = 0;
+                await fileStream.CopyToAsync(fileStream2, cancellationToken);
+            }
+
+            result.Message += $"\nФайл сохранен: {tempFilePath}";
+
+            if (result.Success)
+            {
+                taskEntity.TaskData.Add("FilePath", tempFilePath);
+                taskEntity.TaskData.Add("FileSize", result.FileSize);
+                await unitOfWork.BackgroundTasks.CompleteTaskAsync(taskId, result);
+            }
+            else
+            {
+                await unitOfWork.BackgroundTasks.FailTaskAsync(taskId, result.Message);
+            }
+
+            await unitOfWork.CommitAsync();
+
+            var completedTask = await GetTaskByIdAsync(taskId);
+            OnTaskStatusChanged(completedTask);
+            OnTaskCompleted(completedTask);
+        }
+        catch (OperationCanceledException)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await unitOfWork.BackgroundTasks.UpdateStatusAsync(
+                taskId,
+                BackgroundTaskStatus.Cancelled,
+                0,
+                "Задача была отменена пользователем");
+
+            await unitOfWork.CommitAsync();
+
+            var cancelledTask = await GetTaskByIdAsync(taskId);
+            OnTaskStatusChanged(cancelledTask);
+            OnTaskCompleted(cancelledTask);
+        }
+        catch (Exception ex)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            
+            await unitOfWork.BackgroundTasks.FailTaskAsync(taskId, ex.Message);
+            await unitOfWork.CommitAsync();
+
+            var failedTask = await GetTaskByIdAsync(taskId);
+            OnTaskStatusChanged(failedTask);
+            OnTaskCompleted(failedTask);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
 
         private async Task ExecuteImportTaskAsync(
             Guid taskId,

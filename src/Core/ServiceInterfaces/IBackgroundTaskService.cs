@@ -12,6 +12,11 @@ namespace Core
             string contentType,
             string userName);
 
+        public Task<BackgroundTask> EnqueueExportTaskAsync(
+            TableExportRequestModel exportRequest,
+            string userName,
+            CancellationToken cancellationToken = default);
+
         Task<List<BackgroundTask>> GetActiveTasksAsync();
 
         Task<BackgroundTask> GetTaskByIdAsync(Guid taskId);

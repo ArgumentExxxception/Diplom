@@ -1,5 +1,6 @@
 using Core;
 using Core.Logging;
+using Core.RepoInterfaces;
 using Core.ServiceInterfaces;
 using Domain.RepoInterfaces;
 using Infrastructure.Logging;
@@ -29,6 +30,11 @@ public static class InfrastructureServiceExtensions
         services.AddAutoMapper(typeof(MappingProfile).Assembly);
         services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
         services.AddScoped<IDatabaseService, DatabaseService>();
+        
+        services.AddScoped<IDataExportRepository, DataExportRepository>();
+        services.AddScoped<IXmlExportService, XmlExportService>();
+        services.AddScoped<ICsvExportService, CsvExportService>();
+        services.AddScoped<IFileExportService, FileExportService>();
         
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

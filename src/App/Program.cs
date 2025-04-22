@@ -51,6 +51,7 @@ builder.Services.AddScoped<IDatabaseClientService, DatabaseClientService>();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<IAuthClientService,AuthClientService>();
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
+builder.Services.AddScoped<IDataExportClientService, DataExportClientService>();
 builder.Services.AddBlazoredLocalStorage();
 builder.Services.AddScoped<ErrorHandlingService>();
 builder.Services.Configure<FormOptions>(options =>
