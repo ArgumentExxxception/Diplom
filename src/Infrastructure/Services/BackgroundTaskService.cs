@@ -122,26 +122,21 @@ namespace Infrastructure.Services
         {
             try
             {
-                // Ждем доступный слот
                 await _semaphore.WaitAsync(cancellationToken);
 
                 using var scope = _serviceScopeFactory.CreateScope();
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-                // Обновляем статус задачи на Running
+                
                 await unitOfWork.BackgroundTasks.UpdateStatusAsync(taskId, BackgroundTaskStatus.Running);
                 await unitOfWork.CommitAsync();
-
-                // Уведомляем об изменении статуса
+                
                 var updatedTask = await GetTaskByIdAsync(taskId);
                 OnTaskStatusChanged(updatedTask);
-
-                // Копируем поток в память
+                
                 using var memoryStream = new MemoryStream();
                 await fileStream.CopyToAsync(memoryStream, cancellationToken);
                 memoryStream.Position = 0;
-
-                // Выполняем импорт с помощью FileHandlerService
+                
                 var fileHandlerService = scope.ServiceProvider.GetRequiredService<IFileHandlerService>();
                 var result = await fileHandlerService.ImportDataAsync(
                     memoryStream,
@@ -149,15 +144,13 @@ namespace Infrastructure.Services
                     contentType,
                     importRequest,
                     cancellationToken);
-
-                // Проверяем запрос на отмену
+                
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var taskEntity = await unitOfWork.BackgroundTasks.GetByIdAsync(taskId);
                 if (taskEntity.CancellationRequested)
                     cancellationToken.ThrowIfCancellationRequested();
-
-                // Обновляем задачу согласно результату импорта
+                
                 if (result.Success)
                 {
                     await unitOfWork.BackgroundTasks.CompleteTaskAsync(taskId, result);
@@ -168,8 +161,7 @@ namespace Infrastructure.Services
                 }
 
                 await unitOfWork.CommitAsync();
-
-                // Уведомляем об изменении и завершении задачи
+                
                 var completedTask = await GetTaskByIdAsync(taskId);
                 OnTaskStatusChanged(completedTask);
                 OnTaskCompleted(completedTask);
@@ -178,8 +170,7 @@ namespace Infrastructure.Services
             {
                 using var scope = _serviceScopeFactory.CreateScope();
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-                // Помечаем задачу как отменённую
+                
                 await unitOfWork.BackgroundTasks.UpdateStatusAsync(
                     taskId,
                     BackgroundTaskStatus.Cancelled,
@@ -196,8 +187,6 @@ namespace Infrastructure.Services
             {
                 using var scope = _serviceScopeFactory.CreateScope();
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-                // Помечаем задачу как завершённую с ошибкой
                 await unitOfWork.BackgroundTasks.FailTaskAsync(taskId, ex.Message);
                 await unitOfWork.CommitAsync();
 
@@ -207,7 +196,6 @@ namespace Infrastructure.Services
             }
             finally
             {
-                // Освобождаем семафор
                 _semaphore.Release();
             }
         }
@@ -227,8 +215,7 @@ namespace Infrastructure.Services
             var taskEntity = await unitOfWork.BackgroundTasks.GetByIdAsync(taskId);
             return _mapper.Map<BackgroundTaskEntity, BackgroundTask>(taskEntity);
         }
-
-        // Если нужен синхронный метод, его можно реализовать через GetAwaiter().GetResult(), но лучше использовать асинхронные методы.
+        
         public Task<BackgroundTask> GetTaskById(Guid taskId)
         {
             return GetTaskByIdAsync(taskId);
@@ -252,12 +239,10 @@ namespace Infrastructure.Services
                 (taskEntity.Status != BackgroundTaskStatus.Pending &&
                  taskEntity.Status != BackgroundTaskStatus.Running))
                 return false;
-
-            // Помечаем задачу как запрошенную для отмены
+            
             await unitOfWork.BackgroundTasks.RequestCancellationAsync(taskId);
             await unitOfWork.CommitAsync();
 
-            // Если CancellationTokenSource существует – отменяем задачу
             if (_cancellationTokens.TryGetValue(taskId, out var cts))
             {
                 cts.Cancel();

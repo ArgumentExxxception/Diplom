@@ -28,21 +28,18 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     {
         isLoading = true;
         
-        // Получаем ID текущего пользователя
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var token = await _localStorage.GetItemAsync<string>("authToken");
         userId = GetEmailFromToken(token);
         
         await RefreshTasks();
         
-        // Настраиваем таймер для периодического обновления задач
         refreshTimer = new Timer(async _ =>
         {
             await RefreshTasks();
             await InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10));
         
-        // Подписываемся на события изменения статуса задач
         BackgroundTaskService.TaskStatusChanged += OnTaskStatusChanged;
         BackgroundTaskService.TaskCompleted += OnTaskCompleted;
     }
@@ -58,7 +55,6 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     {
         isLoading = true;
         
-        // Получаем задачи текущего пользователя
         tasks = await BackgroundTaskService.GetTasksByUserAsync(userId);
         
         ApplyFilters();
@@ -68,7 +64,6 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     
     private void ApplyFilters()
     {
-        // Применяем фильтры
         filteredTasks = tasks;
         
         if (statusFilter.HasValue)
@@ -77,8 +72,7 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
                 .Where(t => t.Status == statusFilter.Value)
                 .ToList();
         }
-        
-        // Выполняем пагинацию
+
         paginatedTasks = filteredTasks
             .Skip(page * rowsPerPage)
             .Take(rowsPerPage)
@@ -101,7 +95,6 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     
     private async Task CancelTask(BackgroundTask task)
     {
-        // Запрашиваем подтверждение
         var parameters = new DialogParameters
         {
             { "ContentText", $"Вы уверены, что хотите отменить задачу '{task.Name}'?" },
@@ -154,15 +147,12 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     
     private void OnTaskStatusChanged(object sender, BackgroundTask task)
     {
-        // Обновляем задачу в списке, если она там есть
         var existingTask = tasks.FirstOrDefault(t => t.Id == task.Id);
         if (existingTask != null)
         {
-            // Обновляем существующую задачу
             var index = tasks.IndexOf(existingTask);
             tasks[index] = task;
             
-            // Применяем фильтры и обновляем UI
             ApplyFilters();
             InvokeAsync(StateHasChanged);
         }
@@ -170,7 +160,6 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     
     private void OnTaskCompleted(object sender, BackgroundTask task)
     {
-        // То же самое, что и при изменении статуса
         OnTaskStatusChanged(sender, task);
     }
     
@@ -230,7 +219,6 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
     
     public void Dispose()
     {
-        // Отписываемся от событий и освобождаем ресурсы
         BackgroundTaskService.TaskStatusChanged -= OnTaskStatusChanged;
         BackgroundTaskService.TaskCompleted -= OnTaskCompleted;
         refreshTimer?.Dispose();

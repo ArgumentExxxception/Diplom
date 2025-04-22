@@ -7,7 +7,7 @@ namespace Infrastructure.Services;
 
 public class BackgroundTaskCleanupService : BackgroundService
 {
-    private readonly IServiceScopeFactory _serviceScopeFactory; // Используем IServiceScopeFactory вместо IBackgroundTaskService
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly TimeSpan _cleanupInterval = TimeSpan.FromHours(1);
     private readonly TimeSpan _taskMaxAge = TimeSpan.FromDays(1);
 
@@ -24,13 +24,11 @@ public class BackgroundTaskCleanupService : BackgroundService
         {
             try
             {
-                // Создаем область видимости для доступа к сервисам
+
                 using (var scope = _serviceScopeFactory.CreateScope())
                 {
-                    // Получаем BackgroundTaskService из области видимости
                     var backgroundTaskService = scope.ServiceProvider.GetRequiredService<IBackgroundTaskService>();
                     
-                    // Вызываем метод очистки
                     backgroundTaskService.CleanupOldTasksAsync(_taskMaxAge);
                 }
             }

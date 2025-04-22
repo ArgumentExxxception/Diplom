@@ -16,22 +16,18 @@ public partial class ErrorBoundary : ComponentBase
     
     protected override void OnInitialized()
     {
-        // Устанавливаем обработчик по умолчанию, если пользователь не предоставил свой
         if (ErrorContent == null)
         {
             ErrorContent = DefaultErrorContent;
         }
     }
     
-    // Обработка исключения
     public void ProcessError(Exception exception)
     {
         CurrentException = exception;
         
-        // Логирование ошибки
         Console.Error.WriteLine($"Ошибка: {exception.Message}");
-        
-        // Используем сервис для обработки ошибки
+
         ErrorHandler.HandleException(exception);
         
         StateHasChanged();
@@ -42,7 +38,6 @@ public partial class ErrorBoundary : ComponentBase
         "<MudText Typo=\"Typo.body2\">@exception.Message</MudText> " +
         "<MudButton OnClick=\"ResetError\" Variant=\"Variant.Outlined\" Color=\"Color.Primary\" Size=\"Size.Small\" Class=\"mt-2\">Перезагрузить страницу</MudButton></MudAlert>;");
     
-    // Сброс ошибки
     public void ResetError()
     {
         CurrentException = null;

@@ -27,7 +27,6 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
     {
         try
         {
-            // Преобразуем дубликаты, нормализуя значения.
             var normalizedDuplicates = NormalizeDuplicates(duplicates);
             var duplicatesJson = JsonConvert.SerializeObject(normalizedDuplicates);
         
@@ -71,20 +70,17 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
     
     private object NormalizeValue(object value)
     {
-        // Если значение не является JsonElement — возвращаем как есть.
         if (!(value is System.Text.Json.JsonElement jsonElement))
             return value;
 
-        // В зависимости от типа JsonElement извлекаем нужное значение
         switch (jsonElement.ValueKind)
         {
             case System.Text.Json.JsonValueKind.Number:
-                // Пробуем вернуть число как int или double 
                 if (jsonElement.TryGetInt32(out int intValue))
                     return intValue;
                 if (jsonElement.TryGetDouble(out double doubleValue))
                     return doubleValue;
-                return jsonElement.ToString(); // fallback
+                return jsonElement.ToString();
             case System.Text.Json.JsonValueKind.String:
                 return jsonElement.GetString();
             case System.Text.Json.JsonValueKind.True:
@@ -93,7 +89,6 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
                 return false;
             case System.Text.Json.JsonValueKind.Null:
                 return null;
-            // Если объект или массив — можно конвертировать в строку или оставить по необходимости:
             default:
                 return jsonElement.ToString();
         }
@@ -103,32 +98,25 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
     {
         try
         {
-            // Проверка файла
             if (file == null || file.Size == 0)
             {
                 _errorHandler.ShowErrorMessage("Файл не был предоставлен или пуст");
                 return new ImportResult { Success = false, Message = "Файл не был предоставлен или пуст" };
             }
             
-            // Подготовка содержимого для multipart-запроса
             using var content = new MultipartFormDataContent();
             
-            // Добавляем файл
             var fileContent = new StreamContent(file.OpenReadStream(long.MaxValue));
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
             content.Add(fileContent, "file", file.Name);
 
-            // Добавляем параметры импорта
             var importRequestJson = System.Text.Json.JsonSerializer.Serialize(importRequest);
             content.Add(new StringContent(importRequestJson, Encoding.UTF8, "application/json"), "importRequestJson");
 
-            // Устанавливаем заголовок авторизации
             await SetAuthHeaderAsync();
-            
-            // Отправляем запрос
+
             var response = await _httpClient.PostAsync("api/File/import", content, cancellationToken);
-            
-            // Обрабатываем ошибки
+
             if (!response.IsSuccessStatusCode)
             {
                 await _errorHandler.HandleHttpErrorResponse(response);
@@ -140,7 +128,6 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
                 return new ImportResult{Success = true, Message = "Импорт успешно запущен в фоновом процессе"};
             }
             
-            // Десериализуем ответ
             return await response.Content.ReadFromJsonAsync<ImportResult>(cancellationToken: cancellationToken) 
                    ?? new ImportResult { Success = false, Message = "Не удалось обработать ответ сервера" };
         }

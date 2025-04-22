@@ -23,7 +23,6 @@ public class DatabaseClientService : HttpClientBase,IDatabaseClientService
         }
         catch
         {
-            // Ошибка уже обработана в базовом классе HttpClientBase
             return new List<TableModel>();
         }
     }

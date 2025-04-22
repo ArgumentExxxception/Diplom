@@ -16,7 +16,6 @@ public static class InfrastructureServiceExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services,IConfiguration configuration)
     {
-        // Регистрируем конкретную реализацию сервиса
         services.AddEntityFrameworkNpgsql().AddDbContext<Context>(opt =>
         {
             opt.UseNpgsql(c => c.MigrationsAssembly("Infrastructure"));

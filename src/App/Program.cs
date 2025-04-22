@@ -20,21 +20,21 @@ builder.Services.AddCore();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Debug() // Минимальный уровень логирования — Debug
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Information) // Для Microsoft — Information
-    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning) // Для Microsoft.AspNetCore — Warning
-    .Enrich.FromLogContext() // Добавляет контекстные данные
-    .Enrich.WithThreadId() // Добавляет идентификатор потока
-    .Enrich.WithProcessId() // Добавляет идентификатор процесса
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithThreadId()
+    .Enrich.WithProcessId()
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}") // Логи в консоль
     .WriteTo.File(
-        path: "logs/app-.log", // Логи в файл
-        rollingInterval: RollingInterval.Day, // Новый файл каждый день
+        path: "logs/app-.log",
+        rollingInterval: RollingInterval.Day,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}") // Формат логов
-    .CreateLogger(); // Создает логгер
+    .CreateLogger();
 
 builder.Host.UseSerilog();
-// Add MudBlazor services
+
 builder.Services.AddMudServices();
 builder.Services.AddScoped(sp => 
     new HttpClient 
@@ -42,7 +42,6 @@ builder.Services.AddScoped(sp =>
         BaseAddress = new Uri("http://localhost:5056")
     });
 
-// Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddControllers();
@@ -67,7 +66,7 @@ builder.Services.AddAuthentication(options =>
     .AddJwtBearer(options =>
     {
         options.SaveToken = true;
-        options.RequireHttpsMetadata = false; // В продакшн установите true
+        options.RequireHttpsMetadata = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -77,10 +76,9 @@ builder.Services.AddAuthentication(options =>
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
-            ClockSkew = TimeSpan.Zero // Убирает стандартную 5-минутную погрешность в проверке времени
+            ClockSkew = TimeSpan.Zero
         };
 
-        // Обработка событий JWT аутентификации (опционально)
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>

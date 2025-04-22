@@ -45,7 +45,6 @@ public class XmlImportService: IXmlImportService
             }
             using var reader = await CreateXmlReaderAsync(fileStream, importRequest, cancellationToken);
 
-            // Определяем корневой элемент и элемент строки
             string rootElement = string.IsNullOrEmpty(importRequest.XmlRootElement) ? "root" : importRequest.XmlRootElement;
             string rowElement = string.IsNullOrEmpty(importRequest.XmlRowElement) ? "row" : importRequest.XmlRowElement;
 
@@ -53,15 +52,12 @@ public class XmlImportService: IXmlImportService
             var duplicatedRows = new List<Dictionary<string, object>>();
             int rowIndex = 0;
 
-            // Читаем XML документ
             while (await reader.ReadAsync())
             {
-                // Ждем, пока не найдем корневой элемент
                 if (reader.NodeType == XmlNodeType.Element && (reader.Name == rowElement || reader.Depth == 1))
                 {
                     rowIndex++;
 
-                    // Получаем имя текущего элемента как элемента строки, если rowElement не указан
                     if (string.IsNullOrEmpty(importRequest.XmlRowElement))
                     {
                         rowElement = reader.Name;
@@ -69,7 +65,6 @@ public class XmlImportService: IXmlImportService
                     
                     var (rowData, rowHasErrors) = await ProcessRowAsync(reader,importRequest,rowIndex,importResult,userName,cancellationToken);
 
-                    // Если нет ошибок, добавляем строку к импорту
                     if (!rowHasErrors)
                     {
                         if (!importRequest.IsNewTable && existingData.Count > 0)
@@ -115,19 +110,12 @@ public class XmlImportService: IXmlImportService
         }
         catch (Exception ex)
         {
-            // importResult.ErrorCount++;
-            // result.Errors.Add(new ImportError
-            // {
-            //     // RowNumber = rowIndex,
-            //     ErrorMessage = $"Ошибка при обработке XML: {ex.Message}"
-            // });
             throw new Exception(ex.Message);
         }
     }
     
     private async Task<XmlReader> CreateXmlReaderAsync(Stream fileStream, TableImportRequestModel importRequest, CancellationToken cancellationToken)
     {
-        // Сбрасываем позицию потока
         fileStream.Position = 0;
         var settings = new XmlReaderSettings
         {
@@ -138,8 +126,7 @@ public class XmlImportService: IXmlImportService
         };
 
         var reader = XmlReader.Create(fileStream, settings);
-
-        // Если корневой элемент не задан, определяем его из первого встретившегося элемента.
+        
         if (string.IsNullOrEmpty(importRequest.XmlRootElement))
         {
             while (await reader.ReadAsync())
@@ -166,7 +153,6 @@ public class XmlImportService: IXmlImportService
         var rowData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         bool rowHasErrors = false;
 
-        // Пропускаем пустые элементы строки (например, <Employee/>)
         if (reader.IsEmptyElement)
         {
             return (rowData, rowHasErrors);
@@ -174,19 +160,16 @@ public class XmlImportService: IXmlImportService
 
         int rowDepth = reader.Depth;
         int columnIndex = 0;
-
-        // Чтение дочерних элементов строки
+        
         while (await reader.ReadAsync())
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            // Если достигли конца элемента строки
+            
             if (reader.Depth <= rowDepth && reader.NodeType == XmlNodeType.EndElement)
             {
                 break;
             }
-
-            // Обрабатываем дочерние элементы, относящиеся к колонкам (только глубина rowDepth + 1)
+            
             if (reader.NodeType == XmlNodeType.Element && reader.Depth == rowDepth + 1)
             {
                 string columnValue = string.Empty;
@@ -215,15 +198,12 @@ public class XmlImportService: IXmlImportService
                     {
                         columnValue = reader.Value;
                     }
-
-                    // Пропускаем оставшееся содержимое колонки до закрывающего тега
+                    
                     while (await reader.ReadAsync() &&
                            !(reader.NodeType == XmlNodeType.EndElement && reader.Depth == rowDepth + 1))
                     {
-                        // просто пропускаем содержимое
                     }
-
-                    // Конвертация типа значения колонки
+                    
                     try
                     {
                         if (!string.IsNullOrWhiteSpace(columnValue))
@@ -255,14 +235,9 @@ public class XmlImportService: IXmlImportService
 
                     columnIndex++;
                 }
-                else
-                {
-                    // Если элементов больше, чем колонок в таблице, можно регистрировать предупреждение или логировать
-                }
             }
         }
 
-        // Проверка заполненности всех обязательных полей
         foreach (var column in importRequest.Columns.Where(c =>
                      c.IsRequired && c.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && c.Name != DataProcessingUtils.MODIFIED_DATE_COLUMN))
         {

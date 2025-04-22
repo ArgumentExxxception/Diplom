@@ -36,7 +36,7 @@ public class BackgroundTaskRepository : IBackgroundTaskRepository
         if (string.IsNullOrEmpty(userId))
             return await _context.BackgroundTasks
                 .OrderByDescending(t => t.CreatedAt)
-                .Take(100) // Ограничиваем количество для оптимизации
+                .Take(100)
                 .ToListAsync();
 
         return await _context.BackgroundTasks
@@ -152,8 +152,7 @@ public class BackgroundTaskRepository : IBackgroundTaskRepository
         var task = await _context.BackgroundTasks.FindAsync(id);
         return task?.CancellationRequested ?? false;
     }
-
-    // Реализация интерфейса IRepository
+    
     public async Task<IEnumerable<BackgroundTaskEntity>> GetAllAsync()
     {
         return await _context.BackgroundTasks.OrderByDescending(t => t.CreatedAt).ToListAsync();
@@ -178,8 +177,6 @@ public class BackgroundTaskRepository : IBackgroundTaskRepository
 
     public async Task<bool> Delete(int id)
     {
-        // Это метод из базового интерфейса IRepository, который использует int.
-        // Так как наша сущность использует Guid, создадим отдельный метод для удаления
         throw new NotImplementedException("Use DeleteByGuid instead");
     }
 

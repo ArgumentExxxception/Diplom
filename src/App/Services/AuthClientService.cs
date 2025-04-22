@@ -45,7 +45,6 @@ public class AuthClientService : HttpClientBase ,IAuthClientService
         }
         catch (Exception)
         {
-            // Ошибка уже обработана в базовом классе HttpClientBase
             return new LoginResponse { Successful = false, Error = "Не удалось выполнить вход" };
         }
     }
@@ -70,7 +69,6 @@ public class AuthClientService : HttpClientBase ,IAuthClientService
         }
         catch (Exception)
         {
-            // Ошибка уже обработана в базовом классе HttpClientBase
             return new LoginResponse { Successful = false, Error = "Не удалось выполнить регистрацию" };
         }
     }
@@ -88,15 +86,12 @@ public class AuthClientService : HttpClientBase ,IAuthClientService
         }
         catch (Exception)
         {
-            // Даже в случае ошибки, мы все равно удаляем токены и выходим из системы
             await _localStorage.RemoveItemAsync("authToken");
             await _localStorage.RemoveItemAsync("refreshToken");
             ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
         }
     }
-
-    /// Обновляет токен
-    /// </summary>
+    
     public async Task<LoginResponse> RefreshToken()
     {
         try
@@ -126,7 +121,6 @@ public class AuthClientService : HttpClientBase ,IAuthClientService
         }
         catch (Exception)
         {
-            // Ошибка уже обработана в базовом классе HttpClientBase
             return new LoginResponse { Successful = false, Error = "Не удалось обновить токен" };
         }
     }

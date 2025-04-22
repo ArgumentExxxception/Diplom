@@ -38,18 +38,15 @@ public class FileController: ControllerBase
         try
         {
             string userName = HttpContext.User.Identity?.Name;
-            // Парсим колонки
             var columnInfoList = JsonConvert.DeserializeObject<List<ColumnInfo>>(columns);
             if (columnInfoList == null)
                 return BadRequest(new { Message = "Не удалось десериализовать структуру колонок" });
-
-            // Парсим и нормализуем дубликаты
+            
             var duplicatesArray = JArray.Parse(duplicates);
             var duplicatesDictionary = duplicatesArray
                 .Select(item => NormalizeJsonDictionary(item))
                 .ToList();
-
-            // Выполняем обновление
+            
             await _mediator.Send(new UpdateDuplicatesCommand(tableName, duplicatesDictionary, columnInfoList, userName));
 
             return Ok(new { Message = "Дубликаты успешно обновлены", TableName = tableName });
@@ -87,11 +84,9 @@ public class FileController: ControllerBase
             return BadRequest("Некорректные параметры импорта");
         }
 
-        // Если файл большой, запускаем фоновую задачу
         if (file.Length > 50 * 1024 * 1024)
         {
             using var stream = file.OpenReadStream();
-            // Можно использовать BackgroundTaskService для запуска фоновой задачи
             var task = await _backgroundTaskService.EnqueueImportTaskAsync(
                 file.FileName,
                 file.Length,
@@ -99,13 +94,11 @@ public class FileController: ControllerBase
                 stream,
                 file.ContentType,
                 importRequest.UserEmail);
-
-            // Возвращаем информацию о запущенной задаче
+            
             return Accepted(new { Message = "Импорт запущен в фоне", TaskId = task.Id });
         }
         else
         {
-            // Для небольших файлов выполняем синхронный импорт через команду
             using var stream = file.OpenReadStream();
             var command = new ImportDataCommand(stream, file.FileName, file.ContentType, importRequest);
             var result = await _mediator.Send(command, cancellationToken);

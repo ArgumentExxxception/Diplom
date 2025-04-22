@@ -46,20 +46,17 @@ public async Task ProcessCSVFileAsync(
 
             using var reader = new StreamReader(fileStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-
-            // Если в CSV есть заголовки, пропускаем их
+            
             if (importRequest.HasHeaderRow)
             {
                 await csv.ReadAsync();
                 csv.ReadHeader();
             }
             
-            // Пропускаем дополнительные строки согласно параметру SkipRows
             if (importRequest.SkipRows > 0)
             {
                 for (int i = 0; i < importRequest.SkipRows; i++)
                 {
-                    // Читаем и пропускаем строку, если она существует
                     if (!await csv.ReadAsync())
                     {
                         break;
@@ -117,8 +114,7 @@ public async Task ProcessCSVFileAsync(
                         });
                     }
                 }
-
-                // Проверка всех обязательных полей (на случай, если их больше, чем в CSV)
+                
                 foreach (var column in importRequest.Columns.Where(c =>
                              c.IsRequired && c.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && c.Name != DataProcessingUtils.MODIFIED_DATE_COLUMN))
                 {
@@ -158,7 +154,6 @@ public async Task ProcessCSVFileAsync(
 
                 importResult.RowsProcessed++;
 
-                // Пакетная обработка
                 if (rowsToImport.Count >= 1000)
                 {
                     await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, userName);
@@ -168,7 +163,6 @@ public async Task ProcessCSVFileAsync(
 
             importResult.DuplicatedRows = duplicatedRows;
 
-            // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
                 await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, userName, cancellationToken);

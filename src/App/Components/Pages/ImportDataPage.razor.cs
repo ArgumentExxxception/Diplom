@@ -27,7 +27,7 @@ public partial class ImportDataPage : ComponentBase
     
     private MudTabs _tabs;
     private List<TableModel> _tabels = new();
-    private bool isExpanded = false; // По умолчанию панель свернута
+    private bool isExpanded = false;
     private int _activePanelIndex = 0;
     
     //переменные в новую таблицу
@@ -111,7 +111,7 @@ public partial class ImportDataPage : ComponentBase
     {
         _activePanelIndex = index;
         isNewTable = index == 1;
-        StateHasChanged(); // Обновляем состояние кнопки
+        StateHasChanged();
     }
 
     private bool CanStartImport()
@@ -177,7 +177,6 @@ public partial class ImportDataPage : ComponentBase
     {
         if (_activePanelIndex == 0)
         {
-            // Import to existing table
             return new TableImportRequestModel
             {
                 TableName = selectedTable,
@@ -193,7 +192,6 @@ public partial class ImportDataPage : ComponentBase
         }
         else
         {
-            // Import to new table
             if (string.IsNullOrWhiteSpace(_tableName))
             {
                 Snackbar.Add("Введите название таблицы.", Severity.Warning);
@@ -248,7 +246,7 @@ public partial class ImportDataPage : ComponentBase
 
     private void OnExpandedChanged(bool expanded)
     {
-        isExpanded = expanded; // Обновляем состояние при изменении
+        isExpanded = expanded;
     }
     
     private void AddColumn()

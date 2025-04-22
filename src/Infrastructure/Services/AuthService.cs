@@ -17,8 +17,7 @@ public class AuthService: IAuthService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfiguration _configuration;
-
-    // Добавлен конструктор
+    
     public AuthService(IUnitOfWork unitOfWork, IConfiguration configuration)
     {
         _unitOfWork = unitOfWork;
@@ -41,17 +40,14 @@ public class AuthService: IAuthService
             response.Error = "Неверный пароль";
             return response;
         }
-
-        // Update last login
+        
         user.LastLogin = DateTime.UtcNow;
         await _unitOfWork.Users.Update(user);
         await _unitOfWork.CommitAsync();
-
-        // Generate tokens
+        
         var token = GenerateJwtToken(user);
         var refreshToken = GenerateRefreshToken();
-
-        // Сохраняем refresh token в базе данных
+        
         var userRefreshToken = new RefreshToken
         {
             Token = refreshToken,
@@ -94,7 +90,6 @@ public class AuthService: IAuthService
             return response;
         }
 
-        // Check if username exists
         var existingUserByName = await _unitOfWork.Users.GetByUsernameAsync(registerRequest.Username);
         if (existingUserByName != null)
         {
@@ -102,34 +97,30 @@ public class AuthService: IAuthService
             return response;
         }
 
-        // Check if email exists
         var existingUserByEmail = await _unitOfWork.Users.GetByEmailAsync(registerRequest.Email);
         if (existingUserByEmail != null)
         {
             response.Error = "Email уже зарегистрирован";
             return response;
         }
-
-        // Create salt and hash password
+        
         var salt = SecurityService.GenerateSalt();
         var passwordHash = SecurityService.HashPassword(registerRequest.Password, salt);
-
-        // Create new user
+        
         var user = new User
         {
             Username = registerRequest.Username,
             Email = registerRequest.Email,
             PasswordHash = passwordHash,
             Salt = salt,
-            Roles = new List<string> { "User" }, // Default role
+            Roles = new List<string> { "User" },
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
 
         await _unitOfWork.Users.Add(user);
         await _unitOfWork.CommitAsync();
-
-        // Auto login after registration
+        
         var loginRequest = new LoginRequestDto
         {
             Username = registerRequest.Username,
@@ -138,8 +129,7 @@ public class AuthService: IAuthService
 
         return await LoginAsync(loginRequest);
     }
-
-    // Реализация метода обновления токена
+    
     public async Task<LoginResponse> RefreshTokenAsync(string token, string refreshToken)
     {
         var response = new LoginResponse { Successful = false };
@@ -167,7 +157,6 @@ public class AuthService: IAuthService
             return response;
         }
 
-        // Проверяем срок действия refresh token
         if (storedRefreshToken.Expires < DateTime.UtcNow)
         {
             // Удаляем просроченный токен
@@ -219,8 +208,7 @@ public class AuthService: IAuthService
 
         return response;
     }
-
-    // Реализация метода выхода из системы
+    
     public async Task<bool> LogoutAsync(string token)
     {
         try
@@ -237,7 +225,6 @@ public class AuthService: IAuthService
                 return false;
             }
 
-            // Удаляем все refresh токены пользователя
             await _unitOfWork.RefreshTokens.RemoveAllForUser(int.Parse(userId));
             await _unitOfWork.CommitAsync();
 
@@ -284,8 +271,7 @@ public class AuthService: IAuthService
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Email, user.Email),
         };
-
-        // Add role claims
+        
         foreach (var role in user.Roles)
         {
             claims.Add(new Claim(ClaimTypes.Role, role));

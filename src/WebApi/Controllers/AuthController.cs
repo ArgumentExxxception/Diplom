@@ -34,11 +34,9 @@ public class AuthController : ControllerBase
         
         if (!result.Successful)
         {
-            // Возвращаем стандартизированный ответ с ошибкой
             return Unauthorized(ApiResponse<LoginResponse>.Fail(result.Error, StatusCodes.Status401Unauthorized));
         }
         
-        // Возвращаем стандартизированный успешный ответ
         return Ok(ApiResponse<LoginResponse>.SuccessBuild(result, "Вход выполнен успешно"));
     }
 
@@ -49,7 +47,6 @@ public class AuthController : ControllerBase
     {
         try
         {
-            // Проверяем пароль и его подтверждение
             if (registerRequest.Password != registerRequest.ConfirmPassword)
             {
                 throw new ValidationException("Пароли не совпадают", 

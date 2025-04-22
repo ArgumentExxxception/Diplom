@@ -40,14 +40,12 @@ public class DataImportRepository: IDataImportRepository
             {
                 string paramName = $"@p{paramIndex}";
                 object normalizedValue = NormalizeValue(kv.Value);
-                // Используем двойные кавычки для экранирования имен колонок в PostgreSQL
                 whereClauses.Add($"\"{kv.Key}\" = {paramName}");
                 parameters.Add(normalizedValue ?? DBNull.Value);
                 paramIndex++;
             }
 
             string whereClause = string.Join(" AND ", whereClauses);
-            // Аналогично для имени таблицы
             string deleteSql = $"DELETE FROM \"{tableName}\" WHERE {whereClause}";
 
             await _dbContext.Database.ExecuteSqlRawAsync(deleteSql, parameters.ToArray(), cancellationToken);
@@ -57,20 +55,15 @@ public class DataImportRepository: IDataImportRepository
     
     private object NormalizeValue(object value)
     {
-        // Если значение уже не словарь, просто возвращаем его.
         if (!(value is Dictionary<string, object> nested))
             return value;
-    
-        // Если вложенный словарь содержит ровно один элемент,
-        // можно считать, что нас интересует его значение.
+        
         if (nested.Count == 1)
         {
             return nested.Values.First();
         }
-    
-        // Если структура более сложная, либо выбрасываем исключение, либо возвращаем строковое представление.
-        // Здесь можно настроить логику под конкретный сценарий.
-        return nested.ToString(); // или throw new InvalidOperationException("Не удалось нормализовать значение фильтра.");
+
+        return nested.ToString();
     }
     
 public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema,
@@ -100,8 +93,7 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
     foreach (var row in rows)
     { 
         await writer.StartRowAsync(cancellationToken);
-        
-        // Записываем значения для стандартных колонок
+
         foreach (var column in schema.Columns)
         {
             object? value = row.TryGetValue(column.Name, out var v) ? v : null;
@@ -112,14 +104,12 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
                 await ConvertToNpgsqlType(value, column, writer);
         }
         
-        // Теперь запишем значение для lastmodifiedby
         string modifiedBy = userEmail;
         if (row.ContainsKey("lastmodifiedby") && row["lastmodifiedby"] != null)
         {
             modifiedBy = row["lastmodifiedby"].ToString();
         }
         
-        // Запись значения lastmodifiedby в поток
         await writer.WriteAsync(modifiedBy, NpgsqlDbType.Text);
     }
 
@@ -147,7 +137,6 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
                 break;
             case ColumnTypes.Date:
             {
-                // Null-значения уже обработаны выше
                 DateTime dateValue;
 
                 switch (value)
@@ -161,7 +150,6 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
                         break;
 
                     case string s:
-                        // Попытаться спарсить как ISO-8601 или общий формат
                         if (!DateTime.TryParse(
                                 s,
                                 CultureInfo.InvariantCulture,
@@ -174,15 +162,12 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
                         break;
 
                     case long l:
-                        // Unix-время в секундах
                         dateValue = DateTimeOffset.FromUnixTimeSeconds(l)
                                                   .UtcDateTime
                                                   .Date;
                         break;
 
                     case double dbl:
-                        // интерпретируем как Unix-время (если больше 1_000_000_000) 
-                        // или как OLE Automation Date (если меньше)
                         if (Math.Abs(dbl) > 1_000_000_000)
                         {
                             dateValue = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dbl))
@@ -204,7 +189,6 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
                         break;
 
                     default:
-                        // Попытаться конвертировать через ToString()
                         if (DateTime.TryParse(
                                 value.ToString(),
                                 CultureInfo.InvariantCulture,
@@ -270,12 +254,10 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
         {
             throw new InvalidOperationException($"Таблица '{tableName}' не найдена или не содержит столбцов.");
         }
-
-        // Формируем SQL-запрос для выборки данных
+        
         var columnNames = columns.Select(c => $"\"{c.Name}\"");
         var query = $"SELECT {string.Join(", ", columnNames)} FROM \"{tableName}\";";
-
-        // Выполняем запрос
+        
         await using var command = _dbContext.Database.GetDbConnection().CreateCommand();
         command.CommandText = query;
         if (_dbContext.Database.GetDbConnection().State != ConnectionState.Open)
@@ -293,7 +275,6 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
                 var columnName = reader.GetName(i);
                 var value = reader.GetValue(i);
 
-                // Преобразуем DBNull в null
                 rowData[columnName] = value == DBNull.Value ? null : value;
             }
 

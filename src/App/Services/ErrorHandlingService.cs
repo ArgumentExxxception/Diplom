@@ -55,10 +55,8 @@ public class ErrorHandlingService
             }
             catch
             {
-                // Если не удалось десериализовать как ApiResponse, показываем содержимое как есть
             }
-            
-            // Если не удалось получить структурированные данные об ошибке
+
             if (string.IsNullOrEmpty(errorContent))
             {
                 ShowErrorMessage(GetDefaultErrorMessage(response.StatusCode));
@@ -70,7 +68,6 @@ public class ErrorHandlingService
         }
         catch (Exception ex)
         {
-            // В случае ошибки при обработке ответа
             ShowErrorMessage($"Произошла ошибка при обработке ответа сервера: {ex.Message}");
         }
     }

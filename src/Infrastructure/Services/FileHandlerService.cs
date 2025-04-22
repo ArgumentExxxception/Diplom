@@ -58,9 +58,7 @@ public class FileHandlerService: IFileHandlerService
 
         try
         {
-            // _logger.LogInformation(
-            //     "Начало процесса импорта. Файл: {FileName}, Таблица: {TableName}, Пользователь: {UserName}",
-            //     fileName, importRequest.TableName, userName);
+
             cancellationToken.ThrowIfCancellationRequested();
             
             if (IsXMLFile(fileName, contentType))
@@ -78,20 +76,9 @@ public class FileHandlerService: IFileHandlerService
             result.Message = result.Success
                 ? $"Импорт успешно завершен. Обработано {result.RowsProcessed} строк."
                 : $"Импорт завершен с ошибками. Обработано {result.RowsProcessed} строк, найдено {result.ErrorCount} ошибок.";
-
-            // Логируем результат операции
-            // await _operationLogService.LogImportOperationAsync(
-            //     importRequest.TableName,
-            //     fileName,
-            //     userName,
-            //     result.ProcessedRowsCount,
-            //     result.ErrorsCount,
-            //     stopwatch.ElapsedMilliseconds,
-            //     result.Success);
         }
         catch (Exception ex)
         {
-            // _logger.LogError(ex, "Ошибка при импорте данных из файла {FileName}", fileName);
             result.Success = false;
             result.Message = $"Произошла ошибка при импорте: {ex.Message}";
             result.ErrorCount++;
@@ -100,26 +87,11 @@ public class FileHandlerService: IFileHandlerService
                 RowNumber = 0,
                 ErrorMessage = $"Общая ошибка: {ex.Message}"
             });
-
-            // Логируем ошибку операции
-            // await _operationLogService.LogImportOperationAsync(
-            //     importRequest.TableName,
-            //     fileName,
-            //     userName,
-            //     result.ProcessedRowsCount,
-            //     result.ErrorsCount,
-            //     stopwatch.ElapsedMilliseconds,
-            //     false,
-            //     ex.Message);
         }
         finally
         {
             stopwatch.Stop();
             result.ElapsedTimeMs = stopwatch.ElapsedMilliseconds;
-
-            // _logger.LogInformation(
-            //     "Завершение процесса импорта. Файл: {FileName}, Таблица: {TableName}, Строк: {RowCount}, Ошибок: {ErrorCount}, Время: {ElapsedTime}мс",
-            //     fileName, importRequest.TableName, result.ProcessedRowsCount, result.ErrorsCount, result.ElapsedTimeMs);
         }
 
         return result;
@@ -131,21 +103,17 @@ public class FileHandlerService: IFileHandlerService
         if (duplicatedRows == null || duplicatedRows.Count == 0)
             return;
 
-        // Определим по каким колонкам искать дубликаты
         var searchColumns = columns
             .Where(c => c.SearchInDuplicates)
             .Select(c => c.Name)
             .ToList();
 
-        // Формируем фильтры для удаления (один фильтр на строку)
         var filters = duplicatedRows.Select(row =>
             searchColumns.ToDictionary(col => col, col => row[col])
         ).ToList();
 
-        // Удаляем существующие дубликаты
         await _dataImportRepository.DeleteDuplicatesAsync(tableName, filters, cancellationToken);
 
-        // Вставляем новые строки
         await _dataImportRepository.ImportDataBatchAsync(tableName, duplicatedRows, new TableModel
         {
             TableName = tableName,
@@ -154,19 +122,13 @@ public class FileHandlerService: IFileHandlerService
     }
 
     #region Вспомогательные методы
-        /// <summary>
-        /// Определяет, является ли файл CSV-файлом
-        /// </summary>
         private bool IsCSVFile(string fileName, string contentType)
         {
             return contentType.Contains("csv") ||
                    contentType.Contains("text/plain") ||
                    fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
         }
-
-        /// <summary>
-        /// Определяет, является ли файл XML-файлом
-        /// </summary>
+        
         private bool IsXMLFile(string fileName, string contentType)
         {
             return contentType.Contains("xml") ||

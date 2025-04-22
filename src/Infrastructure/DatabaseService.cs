@@ -18,7 +18,6 @@ public class DatabaseService: IDatabaseService
     }
     public async Task<List<TableModel>> GetPublicTablesAsync()
     {
-        // Запрос для получения списка публичных таблиц
         var query = @"
     SELECT 
         t.table_name as table_name,
@@ -34,10 +33,8 @@ public class DatabaseService: IDatabaseService
     WHERE 
         t.table_schema = 'public';";
 
-        // Выполняем запрос и получаем список имен таблиц
         var tableNames = await _unitOfWork.ExecuteQueryAsync<TableInfoDto>(query);
-
-        // Создаем список TableModel для каждой таблицы
+        
         var tables = new List<TableModel>();
 
         foreach (var tableInfo in tableNames)
@@ -48,7 +45,7 @@ public class DatabaseService: IDatabaseService
             {
                 TableName = tableInfo.TableName,
                 Columns = columnInfos,
-                TableData = new List<string>(), // Можно добавить логику для получения данных таблицы
+                TableData = new List<string>(),
                 PrimaryKey = "",
                 TableComment = tableInfo.TableComment ?? string.Empty
             };
@@ -67,7 +64,6 @@ public class DatabaseService: IDatabaseService
 
     public async Task<List<ColumnInfo>> GetColumnInfoAsync(string tableName)
     {
-        // Получаем информацию о колонках для каждой таблицы
         var columnsQuery = $@"
             SELECT column_name, data_type, is_nullable
             FROM information_schema.columns 
@@ -75,12 +71,9 @@ public class DatabaseService: IDatabaseService
             AND table_schema = 'public';";
         
         var columns = await _unitOfWork.ExecuteQueryAsync<ColumnInfoDto>(columnsQuery);
-        // Получаем метаданные из нашей новой сущности, сохранённой в appschema
-        // Предполагается, что репозиторий корректно настроен для работы с ImportColumnMetadataEntity
+
         var metadataList = await _unitOfWork.ImportColumnMetadatas.GetByTableNameAsync(tableName);
-    
-        // Объединяем базовую информацию с данными из метаданных.
-        // Если для колонки найдены метаданные, используем их; иначе, задаём значения по умолчанию.
+        
         var columnInfos = columns.Where(x => x.ColumnName != DataProcessingUtils.MODIFIED_BY_COLUMN && x.ColumnName != DataProcessingUtils.MODIFIED_DATE_COLUMN).Select(c =>
         {
             var meta = metadataList.FirstOrDefault(m => 
@@ -90,7 +83,6 @@ public class DatabaseService: IDatabaseService
             {
                 Name = c.ColumnName,
                 Type = MapDataType(c.DataType),
-                // Приоритет: если есть метаданные, то брать IsRequired оттуда, иначе из information_schema
                 IsRequired = meta != null ? meta.IsRequired : (c.IsNullable.Equals("NO", StringComparison.OrdinalIgnoreCase)),
                 IsPrimaryKey = meta?.IsPrimaryKey ?? false,
                 IsGeoTag = meta?.IsGeoTag ?? false,
