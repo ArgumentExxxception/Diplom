@@ -1,5 +1,6 @@
 ﻿using Core.Models;
 using Core.Queries;
+using Core.ServiceInterfaces;
 using MediatR;
 
 namespace Core.Handlers;

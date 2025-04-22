@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Headers;
+﻿using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using App.Interfaces;
@@ -132,6 +133,11 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
             {
                 await _errorHandler.HandleHttpErrorResponse(response);
                 return new ImportResult { Success = false, Message = $"Ошибка импорта: {response.ReasonPhrase}" };
+            }
+
+            if (response.StatusCode == HttpStatusCode.Accepted)
+            {
+                return new ImportResult{Success = true, Message = "Импорт успешно запущен в фоновом процессе"};
             }
             
             // Десериализуем ответ

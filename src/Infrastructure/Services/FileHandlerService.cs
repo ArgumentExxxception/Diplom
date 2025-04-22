@@ -125,7 +125,7 @@ public class FileHandlerService: IFileHandlerService
         return result;
     }
 
-    public async Task UpdateDuplicatesAsync(string tableName, List<Dictionary<string, object>> duplicatedRows, List<ColumnInfo> columns,
+    public async Task UpdateDuplicatesAsync(string tableName, List<Dictionary<string, object>> duplicatedRows, List<ColumnInfo> columns, string userEmail,
         CancellationToken cancellationToken = default)
     {
         if (duplicatedRows == null || duplicatedRows.Count == 0)
@@ -150,7 +150,7 @@ public class FileHandlerService: IFileHandlerService
         {
             TableName = tableName,
             Columns = columns
-        });
+        }, userEmail, cancellationToken);
     }
 
     #region Вспомогательные методы

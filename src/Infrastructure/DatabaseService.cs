@@ -2,6 +2,8 @@ using System.Text;
 using Core;
 using Core.DTOs;
 using Core.Models;
+using Core.ServiceInterfaces;
+using Core.Utils;
 using Domain.Enums;
 using Infrastructure.DTOs;
 
@@ -56,6 +58,13 @@ public class DatabaseService: IDatabaseService
 
         return tables;
     }
+
+    public async Task<TableModel?> GetTableAsync(string tableName)
+    {
+        List<TableModel> tables = await GetPublicTablesAsync();
+        return tables.Find(t => t.TableName == tableName) ?? null;
+    }
+
     public async Task<List<ColumnInfo>> GetColumnInfoAsync(string tableName)
     {
         // Получаем информацию о колонках для каждой таблицы
@@ -72,7 +81,7 @@ public class DatabaseService: IDatabaseService
     
         // Объединяем базовую информацию с данными из метаданных.
         // Если для колонки найдены метаданные, используем их; иначе, задаём значения по умолчанию.
-        var columnInfos = columns.Select(c =>
+        var columnInfos = columns.Where(x => x.ColumnName != DataProcessingUtils.MODIFIED_BY_COLUMN && x.ColumnName != DataProcessingUtils.MODIFIED_DATE_COLUMN).Select(c =>
         {
             var meta = metadataList.FirstOrDefault(m => 
                 m.ColumnName.Equals(c.ColumnName, StringComparison.OrdinalIgnoreCase));
@@ -170,6 +179,13 @@ public class DatabaseService: IDatabaseService
         {
             query.Append($" COMMENT ON TABLE {EscapeIdentifier(tableModel.TableName)} IS '{tableModel.TableComment}';");
         }
+        
+        query.Append($@"
+        CREATE TRIGGER set_audit_fields_trigger
+        BEFORE INSERT OR UPDATE ON {EscapeIdentifier(tableModel.TableName)}
+        FOR EACH ROW
+        EXECUTE FUNCTION public.set_audit_fields();
+        ");
 
         try
         {
@@ -181,26 +197,6 @@ public class DatabaseService: IDatabaseService
             throw new InvalidOperationException("Не удалось создать таблицу. Подробности см. в логах.", ex);
         }
 
-    }
-    
-    private object ConvertValue(string value)
-    {
-        if (int.TryParse(value, out var intValue))
-        {
-            return intValue;
-        }
-        if (DateTime.TryParse(value, out var dateValue))
-        {
-            return dateValue;
-        }
-        return value;
-    }
-
-    private async Task AddEntityToDatabase(Dictionary<string, object> entity)
-    {
-        var tableName = "YourTableName"; // Имя таблицы (можно сделать динамическим)
-        var sqlQuery = $"INSERT INTO {tableName} ({string.Join(", ", entity.Keys)}) VALUES ({string.Join(", ", entity.Values)})";
-        await _unitOfWork.ExecuteQueryAsync<string>(sqlQuery);
     }
     
     private string EscapeIdentifier(string identifier)

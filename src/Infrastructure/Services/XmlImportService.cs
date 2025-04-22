@@ -96,11 +96,10 @@ public class XmlImportService: IXmlImportService
                     }
 
                     importResult.RowsProcessed++;
-
-                    // Пакетная обработка для экономии памяти
+                    
                     if (rowsToImport.Count >= 1000)
                     {
-                        await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                        await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName }, userName);
                         rowsToImport.Clear();
                     }
                 }
@@ -108,10 +107,9 @@ public class XmlImportService: IXmlImportService
             
             importResult.DuplicatedRows = duplicatedRows;
             
-            // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
-                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName }, userName, cancellationToken);
             }
             importResult.RowsUpdated = importResult.RowsProcessed - importResult.RowsInserted - importResult.RowsSkipped - importResult.ErrorCount;
         }
@@ -123,7 +121,7 @@ public class XmlImportService: IXmlImportService
             //     // RowNumber = rowIndex,
             //     ErrorMessage = $"Ошибка при обработке XML: {ex.Message}"
             // });
-            throw new Exception();
+            throw new Exception(ex.Message);
         }
     }
     
@@ -280,15 +278,11 @@ public class XmlImportService: IXmlImportService
             }
         }
 
-        // Устанавливаем данные о модификации
-        rowData[DataProcessingUtils.MODIFIED_DATE_COLUMN] = DateTime.UtcNow;
-        rowData[DataProcessingUtils.MODIFIED_BY_COLUMN] = userName;
-
         return (rowData, rowHasErrors);
     }
 
     
-    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, int maxParallelism = 4)
+    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, string userName,int maxParallelism = 4)
     {
         if (rowsToImport.Count == 0) return;
 
@@ -309,7 +303,7 @@ public class XmlImportService: IXmlImportService
             {
                 try
                 {
-                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel);
+                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel, userName);
                 }
                 finally
                 {

@@ -79,7 +79,7 @@ public async Task ProcessCSVFileAsync(
                 var rowData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 bool rowHasErrors = false;
 
-                for (int i = 0; i < importRequest.Columns.Where(x => x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN).Count(); i++)
+                for (int i = 0; i < importRequest.Columns.Count(x => x.Name != DataProcessingUtils.MODIFIED_BY_COLUMN && x.Name != DataProcessingUtils.MODIFIED_DATE_COLUMN); i++)
                 {
                     var column = importRequest.Columns[i];
                     string value = csv.GetField(i);
@@ -133,11 +133,7 @@ public async Task ProcessCSVFileAsync(
                         });
                     }
                 }
-
-                // Устанавливаем служебные поля
-                rowData[DataProcessingUtils.MODIFIED_DATE_COLUMN] = DateTime.UtcNow;
-                rowData[DataProcessingUtils.MODIFIED_BY_COLUMN] = userName;
-
+                
                 if (!rowHasErrors)
                 {
                     if (!importRequest.IsNewTable && existingData.Count > 0)
@@ -165,7 +161,7 @@ public async Task ProcessCSVFileAsync(
                 // Пакетная обработка
                 if (rowsToImport.Count >= 1000)
                 {
-                    await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
+                    await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, userName);
                     rowsToImport.Clear();
                 }
             }
@@ -175,7 +171,7 @@ public async Task ProcessCSVFileAsync(
             // Импортируем оставшиеся строки
             if (rowsToImport.Count > 0)
             {
-                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.ImportDataBatchAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, userName, cancellationToken);
             }
             importResult.RowsUpdated = importResult.RowsProcessed - importResult.RowsInserted - importResult.RowsSkipped - importResult.ErrorCount;
         }
@@ -185,7 +181,7 @@ public async Task ProcessCSVFileAsync(
         }
     }
 
-    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, int maxParallelism = 4)
+    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, string userName, int maxParallelism = 4)
     {
         if (rowsToImport.Count == 0) return;
 
@@ -206,7 +202,7 @@ public async Task ProcessCSVFileAsync(
             {
                 try
                 {
-                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel);
+                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel, userName);
                 }
                 finally
                 {
