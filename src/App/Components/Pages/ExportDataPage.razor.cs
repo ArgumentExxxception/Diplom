@@ -45,7 +45,6 @@ public partial class ExportDataPage : ComponentBase
         await LoadAvailableTables();
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _currentUserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
-
     }
 
     private async Task LoadAvailableTables()
