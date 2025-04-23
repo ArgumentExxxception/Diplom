@@ -1,9 +1,7 @@
 ﻿@page "/export-data"
-@using Core.Models
 @using Domain.Enums
-@using Microsoft.AspNetCore.Authorization
 @rendermode InteractiveServer
-@attribute [Authorize]
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Экспорт данных</PageTitle>
 
@@ -96,7 +94,7 @@
                                                 ValueChanged="@(value => ToggleColumnSelection(context.Name, value))" />
                                 </MudTd>
                                 <MudTd DataLabel="Имя колонки">@context.Name</MudTd>
-                                <MudTd DataLabel="Тип данных">@((Domain.Enums.ColumnTypes)context.Type)</MudTd>
+                                <MudTd DataLabel="Тип данных">@((ColumnTypes)context.Type)</MudTd>
                             </RowTemplate>
                         </MudTable>
                     </ChildContent>

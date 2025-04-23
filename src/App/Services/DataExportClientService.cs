@@ -13,10 +13,9 @@ public class DataExportClientService: HttpClientBase,IDataExportClientService
 
     public DataExportClientService(
         HttpClient httpClient,
-        ILocalStorageService localStorage,
         ErrorHandlingService errorHandler,
         IJSRuntime jsRuntime)
-        : base(httpClient, localStorage, errorHandler)
+        : base(httpClient, errorHandler)
     {
         _jsRuntime = jsRuntime;
     }
@@ -25,8 +24,6 @@ public class DataExportClientService: HttpClientBase,IDataExportClientService
     {
         try
         {
-            await SetAuthHeaderAsync();
-
             var response = await _httpClient.PostAsJsonAsync("api/File/export", exportRequest, cancellationToken);
     
             if (!response.IsSuccessStatusCode)
@@ -65,8 +62,6 @@ public class DataExportClientService: HttpClientBase,IDataExportClientService
     {
         try
         {
-            await SetAuthHeaderAsync();
-            
             string url = $"api/File/export-size?tableName={Uri.EscapeDataString(tableName)}";
             if (!string.IsNullOrEmpty(filterCondition))
             {

@@ -16,7 +16,7 @@ namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-// [Authorize]
+[Authorize]
 public class FileController: ControllerBase
 {
     private IMediator _mediator { get; set; }
@@ -88,7 +88,7 @@ public class FileController: ControllerBase
 
         if (file.Length > 50 * 1024 * 1024)
         {
-            using var stream = file.OpenReadStream();
+            await using var stream = file.OpenReadStream();
             var task = await _backgroundTaskService.EnqueueImportTaskAsync(
                 file.FileName,
                 file.Length,
@@ -101,7 +101,7 @@ public class FileController: ControllerBase
         }
         else
         {
-            using var stream = file.OpenReadStream();
+            await using var stream = file.OpenReadStream();
             var command = new ImportDataCommand(stream, file.FileName, file.ContentType, importRequest);
             var result = await _mediator.Send(command, cancellationToken);
             return Ok(result);
@@ -109,57 +109,57 @@ public class FileController: ControllerBase
     }
     
     [HttpPost("export")]
-[ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-[ProducesResponseType(StatusCodes.Status400BadRequest)]
-[ProducesResponseType(StatusCodes.Status500InternalServerError)]
-public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel exportRequest, CancellationToken cancellationToken)
-{
-    try
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel exportRequest, CancellationToken cancellationToken)
     {
-        if (exportRequest == null)
+        try
         {
-            return BadRequest("Не получены параметры экспорта");
-        }
-
-        if (string.IsNullOrEmpty(exportRequest.TableName))
-        {
-            return BadRequest("Не указано имя таблицы");
-        }
-
-        if (exportRequest.MaxRows == 0)
-        {
-            var estimatedSize = await _mediator.Send(new GetExportDataSizeQuery(exportRequest.TableName, exportRequest.FilterCondition), cancellationToken);
-            
-            if (estimatedSize > 50 * 1024 * 1024)
+            if (exportRequest == null)
             {
-                var task = await _backgroundTaskService.EnqueueExportTaskAsync(
-                    exportRequest,
-                    exportRequest.UserEmail,
-                    cancellationToken);
-                
-                return Accepted(new { Message = "Экспорт запущен в фоне", TaskId = task.Id });
+                return BadRequest("Не получены параметры экспорта");
             }
+
+            if (string.IsNullOrEmpty(exportRequest.TableName))
+            {
+                return BadRequest("Не указано имя таблицы");
+            }
+
+            if (exportRequest.MaxRows == 0)
+            {
+                var estimatedSize = await _mediator.Send(new GetExportDataSizeQuery(exportRequest.TableName, exportRequest.FilterCondition), cancellationToken);
+                
+                if (estimatedSize > 50 * 1024 * 1024)
+                {
+                    var task = await _backgroundTaskService.EnqueueExportTaskAsync(
+                        exportRequest,
+                        exportRequest.UserEmail,
+                        cancellationToken);
+                    
+                    return Accepted(new { Message = "Экспорт запущен в фоне", TaskId = task.Id });
+                }
+            }
+
+            var command = new ExportDataCommand(exportRequest);
+            var (result, fileStream) = await _mediator.Send(command, cancellationToken);
+
+            if (!result.Success)
+            {
+                return BadRequest(new { Message = result.Message });
+            }
+
+            using var memoryStream = new MemoryStream();
+            await fileStream.CopyToAsync(memoryStream, cancellationToken);
+            var fileBytes = memoryStream.ToArray();
+            
+            return File(fileBytes, result.ContentType, result.FileName);
         }
-
-        var command = new ExportDataCommand(exportRequest);
-        var (result, fileStream) = await _mediator.Send(command, cancellationToken);
-
-        if (!result.Success)
+        catch (Exception ex)
         {
-            return BadRequest(new { Message = result.Message });
+            return StatusCode(500, new { Message = $"Произошла ошибка при экспорте: {ex.Message}" });
         }
-
-        using var memoryStream = new MemoryStream();
-        await fileStream.CopyToAsync(memoryStream, cancellationToken);
-        var fileBytes = memoryStream.ToArray();
-        
-        return File(fileBytes, result.ContentType, result.FileName);
     }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { Message = $"Произошла ошибка при экспорте: {ex.Message}" });
-    }
-}
     
     private Dictionary<string, object?> NormalizeJsonDictionary(JToken item)
     {

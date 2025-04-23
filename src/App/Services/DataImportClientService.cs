@@ -17,9 +17,8 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
 {
     public DataImportClientService(
         HttpClient httpClient,
-        ILocalStorageService localStorage,
         ErrorHandlingService errorHandler) 
-        : base(httpClient, localStorage, errorHandler)
+        : base(httpClient, errorHandler)
     {
     }
 
@@ -42,7 +41,6 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
             var columnsContent = new StringContent(columnsJson, Encoding.UTF8, "application/json");
             content.Add(columnsContent, "columns");
 
-            await SetAuthHeaderAsync();
             var response = await _httpClient.PostAsync("api/File/update-duplicates", content);
 
             if (!response.IsSuccessStatusCode)
@@ -112,9 +110,7 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
 
             var importRequestJson = System.Text.Json.JsonSerializer.Serialize(importRequest);
             content.Add(new StringContent(importRequestJson, Encoding.UTF8, "application/json"), "importRequestJson");
-
-            await SetAuthHeaderAsync();
-
+            
             var response = await _httpClient.PostAsync("api/File/import", content, cancellationToken);
 
             if (!response.IsSuccessStatusCode)

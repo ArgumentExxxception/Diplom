@@ -1,18 +1,17 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using App.Components.Dialogs;
-using Blazored.LocalStorage;
 using Core.Models;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 
 namespace App.Components.Pages;
 
 public partial class BackgroundTasksPage : ComponentBase, IDisposable
 {
-    [Inject] private ILocalStorageService _localStorage { get; set; }
-    
+    [Inject] private AuthenticationStateProvider _authenticationStateProvider { get; set; }
     private List<BackgroundTask> tasks = new();
     private List<BackgroundTask> filteredTasks = new();
     private List<BackgroundTask> paginatedTasks = new();
@@ -29,8 +28,8 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
         isLoading = true;
         
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        userId = GetEmailFromToken(token);
+        authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        userId = authState.User.FindFirst(ClaimTypes.Email)?.Value;
         
         await RefreshTasks();
         

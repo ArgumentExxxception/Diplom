@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Core.Commands;
 using Core.DTOs;
 using Core.Entities;
@@ -20,15 +21,10 @@ public class AuthController : ControllerBase
     {
         _mediator = mediator;
     }
-    /// <summary>
-    ///  Login
-    /// </summary>
-    /// <param name="loginRequest"></param>
-    /// <returns></returns>
     [HttpPost("login")]
-    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse<LoginResponse>>> Login([FromBody] LoginRequestDto loginRequest)
+    public async Task<ActionResult<ApiResponse<UserDto>>> Login([FromBody] LoginRequestDto loginRequest)
     {
         var result = await _mediator.Send(new LoginQuery(loginRequest.Username, loginRequest.Password, loginRequest.RememberMe));
         
@@ -37,7 +33,94 @@ public class AuthController : ControllerBase
             return Unauthorized(ApiResponse<LoginResponse>.Fail(result.Error, StatusCodes.Status401Unauthorized));
         }
         
-        return Ok(ApiResponse<LoginResponse>.SuccessBuild(result, "Вход выполнен успешно"));
+        SetTokenCookie(result.Token, "AppAccessToken", loginRequest.RememberMe);
+        
+        SetTokenCookie(result.RefreshToken, "AppRefreshToken", true);
+        
+        return Ok(ApiResponse<UserDto>.SuccessBuild(result.User, "Вход выполнен успешно"));
+    }
+
+    [HttpPost("refresh-token")]
+    [ProducesResponseType(typeof(ApiResponse<UserDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<UserDto>>> RefreshToken()
+    {
+        var accessToken = Request.Cookies["AppAccessToken"];
+        var refreshToken = Request.Cookies["AppRefreshToken"];
+        
+        if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(refreshToken))
+        {
+            return Unauthorized(ApiResponse<UserDto>.Fail("Токены отсутствуют", StatusCodes.Status401Unauthorized));
+        }
+        
+        var result = await _mediator.Send(new RefreshTokenQuery(accessToken, refreshToken));
+        
+        if (!result.Successful)
+        {
+            Response.Cookies.Delete("AppAccessToken");
+            Response.Cookies.Delete("AppRefreshToken");
+            return Unauthorized(ApiResponse<UserDto>.Fail(result.Error, StatusCodes.Status401Unauthorized));
+        }
+        
+        SetTokenCookie(result.Token, "AppAccessToken", false);
+        SetTokenCookie(result.RefreshToken, "AppRefreshToken", true);
+        
+        return Ok(ApiResponse<UserDto>.SuccessBuild(result.User, "Токен успешно обновлен"));
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse>> Logout()
+    {
+        var token = Request.Cookies["AppAccessToken"];
+        
+        if (!string.IsNullOrEmpty(token))
+        {
+            await _mediator.Send(new LogoutQuery(token));
+        }
+        
+        Response.Cookies.Delete("AppAccessToken");
+        Response.Cookies.Delete("AppRefreshToken");
+        
+        return Ok(ApiResponse.Successed("Выход выполнен успешно"));
+    }
+
+    [HttpGet("currentuser")]
+    [ProducesResponseType(typeof(ApiResponse<UserDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<UserDto>>> GetCurrentUser()
+    {
+        var token = Request.Cookies["AppAccessToken"];
+        
+        if (string.IsNullOrEmpty(token))
+        {
+            return Unauthorized(ApiResponse<UserDto>.Fail("Пользователь не авторизован"));
+        }
+        
+        try
+        {
+            var userInfo = await _mediator.Send(new GetUserFromTokenQuery(token));
+            return Ok(ApiResponse<UserDto>.SuccessBuild(userInfo));
+        }
+        catch (Exception ex)
+        {
+            return Unauthorized(ApiResponse<UserDto>.Fail(ex.Message));
+        }
+    }
+
+    private void SetTokenCookie(string token, string cookieName, bool isPersistent)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Expires = isPersistent 
+                ? DateTimeOffset.UtcNow.AddDays(30) 
+                : DateTimeOffset.UtcNow.AddHours(24)
+        };
+        
+        Response.Cookies.Append(cookieName, token, cookieOptions);
     }
 
     [HttpPost("register")]
@@ -67,34 +150,14 @@ public class AuthController : ControllerBase
             return BadRequest(ApiResponse<LoginResponse>.Fail(ex.Message, StatusCodes.Status400BadRequest, ex.Errors));
         }
     }
-
-    [HttpPost("logout")]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse>> Logout()
-    {
-        var token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-        
-        if (string.IsNullOrEmpty(token))
-        {
-            return BadRequest(ApiResponse.Fail("Токен авторизации не предоставлен"));
-        }
-        
-        await _mediator.Send(new LogoutQuery(token));
-        return Ok(ApiResponse.Successed("Выход выполнен успешно"));
-    }
     
-    [HttpPost("refresh-token")]
-    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ApiResponse<LoginResponse>>> RefreshToken([FromBody] RefreshTokenRequestDto refreshRequest)
+    [HttpGet("whoami")]
+    public async Task<string?> WhoAmI()
     {
-        var result = await _mediator.Send(new RefreshTokenQuery(refreshRequest.Token, refreshRequest.RefreshToken));
-        
-        if (!result.Successful)
+        if (User.Identity.IsAuthenticated)
         {
-            return Unauthorized(ApiResponse<LoginResponse>.Fail(result.Error, StatusCodes.Status401Unauthorized));
+            return User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
         }
-        
-        return Ok(ApiResponse<LoginResponse>.SuccessBuild(result, "Токен успешно обновлен"));
+        return "Не авторизован";
     }
 }
