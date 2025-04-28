@@ -15,6 +15,19 @@ builder.Services.AddOpenApi();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.WebHost.ConfigureKestrel(options =>
+{
+    // Увеличиваем максимальный размер запроса до 10 ГБ
+    options.Limits.MaxRequestBodySize = 10L * 1024L * 1024L * 1024L; // 10GB
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = long.MaxValue;
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
+    options.BufferBodyLengthLimit = long.MaxValue;
+});
 
 builder.Services.AddMediatR(cfg => 
     cfg.RegisterServicesFromAssembly(typeof(ImportDataCommandHandler).Assembly));
@@ -29,12 +42,6 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddScoped(typeof(IAppLogger<>), typeof(AppLogger<>));
 builder.Services.AddFluentValidationAutoValidation();
-builder.Services.Configure<FormOptions>(options =>
-{
-    options.MultipartBodyLengthLimit = long.MaxValue;
-    options.ValueLengthLimit = int.MaxValue;
-    options.MultipartHeadersLengthLimit = int.MaxValue;
-});
 var app = builder.Build();
 
 app.UseExceptionHandling();

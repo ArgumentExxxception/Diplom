@@ -60,8 +60,8 @@ public class FileController: ControllerBase
     }
 
     [HttpPost("import")]
-    [RequestSizeLimit(1_073_741_824)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 1_073_741_824)]
+    [RequestSizeLimit(10_737_418_240)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 10_737_418_240)]
     [ProducesResponseType(typeof(ImportResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -88,20 +88,23 @@ public class FileController: ControllerBase
 
         if (file.Length > 50 * 1024 * 1024)
         {
-            using var stream = file.OpenReadStream();
-            var task = await _backgroundTaskService.EnqueueImportTaskAsync(
+            await using var stream = file.OpenReadStream();
+    
+            var command = new EnqueueImportCommand(
                 file.FileName,
                 file.Length,
+                file.ContentType,
                 importRequest,
                 stream,
-                file.ContentType,
                 importRequest.UserEmail);
-            
+
+            var task = await _mediator.Send(command, cancellationToken);
+
             return Accepted(new { Message = "Импорт запущен в фоне", TaskId = task.Id });
         }
         else
         {
-            using var stream = file.OpenReadStream();
+            await using var stream = file.OpenReadStream();
             var command = new ImportDataCommand(stream, file.FileName, file.ContentType, importRequest);
             var result = await _mediator.Send(command, cancellationToken);
             return Ok(result);
