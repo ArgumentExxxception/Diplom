@@ -12,10 +12,12 @@ namespace Infrastructure.Services;
 public class XmlImportService: IXmlImportService
 {
     private readonly IDataImportRepository _dataImportRepository;
+    private readonly IDatabaseService _databaseService;
 
-    public XmlImportService(IDataImportRepository dataImportRepository)
+    public XmlImportService(IDataImportRepository dataImportRepository, IDatabaseService databaseService)
     {
         _dataImportRepository = dataImportRepository;
+        _databaseService = databaseService;
     }
 
     /// <summary>
@@ -42,6 +44,13 @@ public class XmlImportService: IXmlImportService
             if (!importRequest.IsNewTable)
             {
                 existingData = await _dataImportRepository.GetExistingDataAsync(importRequest.TableName, cancellationToken);
+            }
+            else
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+        
+                await _databaseService.CreateTableAsync(new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.SaveColumnMetadataAsync(importRequest.TableName, importRequest.Columns, cancellationToken);
             }
             using var reader = await CreateXmlReaderAsync(fileStream, importRequest, cancellationToken);
 

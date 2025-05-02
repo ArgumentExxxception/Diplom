@@ -69,13 +69,6 @@ public class DataImportRepository: IDataImportRepository
 public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema,
     string userEmail, CancellationToken cancellationToken = default)
 {
-    if (await _databaseService.GetTableAsync(schema.TableName) == null)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        
-        await _databaseService.CreateTableAsync(schema);
-        await SaveColumnMetadataAsync(tableName, schema.Columns, cancellationToken);
-    }
     var connection = (NpgsqlConnection)_dbContext.Database.GetDbConnection();
     if (connection.State != ConnectionState.Open)
     {
@@ -217,7 +210,7 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
         }
     }
 
-    private async Task SaveColumnMetadataAsync(string tableName, List<ColumnInfo> columns,
+    public async Task SaveColumnMetadataAsync(string tableName, List<ColumnInfo> columns,
         CancellationToken cancellationToken = default)
     {
         foreach (var col in columns)

@@ -39,7 +39,8 @@ builder.Services.AddMudServices();
 builder.Services.AddScoped(sp => 
     new HttpClient 
     { 
-        BaseAddress = new Uri("http://localhost:5056")
+        BaseAddress = new Uri("http://localhost:5056"),
+        Timeout = TimeSpan.FromMinutes(10)
     });
 
 builder.Services.AddRazorComponents()

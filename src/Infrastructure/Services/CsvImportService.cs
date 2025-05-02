@@ -16,10 +16,12 @@ namespace Infrastructure.Services;
 public class CsvImportService: ICsvImportService
 {
     private readonly IDataImportRepository _dataImportRepository;
+    private readonly IDatabaseService _databaseService;
 
-    public CsvImportService(IDataImportRepository dataImportRepository)
+    public CsvImportService(IDataImportRepository dataImportRepository, IDatabaseService databaseService)
     {
         _dataImportRepository = dataImportRepository;
+        _databaseService = databaseService;
     }
 
 public async Task ProcessCSVFileAsync(
@@ -42,6 +44,13 @@ public async Task ProcessCSVFileAsync(
             if (!importRequest.IsNewTable)
             {
                 existingData = await _dataImportRepository.GetExistingDataAsync(importRequest.TableName, cancellationToken);
+            }
+            else
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+        
+                await _databaseService.CreateTableAsync(new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.SaveColumnMetadataAsync(importRequest.TableName, importRequest.Columns, cancellationToken);
             }
 
             using var reader = new StreamReader(fileStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
