@@ -14,4 +14,11 @@ public interface IDataImportRepository
 
     Task SaveColumnMetadataAsync(string tableName, List<ColumnInfo> columns,
         CancellationToken cancellationToken = default);
+
+    Task<HashSet<string>> GetExistingRowKeysAsync(string tableName,
+        List<string> keyColumns,
+        CancellationToken cancellationToken = default);
+
+    Task CreateIndexesForDuplicateColumnsAsync(string tableName, List<ColumnInfo> columns,
+        CancellationToken cancellationToken = default);
 }

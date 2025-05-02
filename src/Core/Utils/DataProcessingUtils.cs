@@ -9,42 +9,6 @@ public static class DataProcessingUtils
     public const string MODIFIED_BY_COLUMN = "lastmodifiedby";
     public const string MODIFIED_DATE_COLUMN = "lastmodifiedon";
     
-        
-    public static bool IsDuplicate(
-        Dictionary<string, object> rowData,
-        List<Dictionary<string, object>> existingData,
-        List<ColumnInfo> columns)
-    {
-        // Служебные столбцы исключаем из сравнения
-        var excludedColumns = new HashSet<string> { MODIFIED_DATE_COLUMN, MODIFIED_BY_COLUMN };
-
-        // Определяем список имен колонок, по которым выполняем сравнение,
-        // т.е. тех, у которых SearchInDuplicates == true и которые не входят в исключения
-        var searchColumns = columns
-            .Where(c => c.SearchInDuplicates && !excludedColumns.Contains(c.Name))
-            .Select(c => c.Name)
-            .ToList();
-
-        // Фильтруем данные строки, оставляя только нужные колонки
-        var filteredRowData = rowData
-            .Where(kv => searchColumns.Contains(kv.Key))
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
-
-        // Проходим по всем существующим строкам и сравниваем только по указанным колонкам
-        return existingData.Any(existingRow =>
-        {
-            var filteredExistingRow = existingRow
-                .Where(kv => searchColumns.Contains(kv.Key))
-                .ToDictionary(kv => kv.Key, kv => kv.Value);
-
-            return searchColumns.All(key =>
-                filteredRowData.ContainsKey(key) &&
-                filteredExistingRow.ContainsKey(key) &&
-                Equals(filteredRowData[key], filteredExistingRow[key])
-            );
-        });
-    }
-    
     /// <summary>
     /// Конвертирует строковое значение в целевой тип данных согласно перечислению ColumnTypes
     /// </summary>
