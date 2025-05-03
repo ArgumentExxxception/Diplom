@@ -230,9 +230,19 @@ public partial class ImportDataPage : ComponentBase
             BackdropClick = true
         };
 
+        int count = 0;
+        var firstTenDuplicates = new List<Dictionary<string, object>>();
+        
+        if (duplicateRows.Count > 10)
+        {
+            count = duplicateRows.Count();
+            firstTenDuplicates = duplicateRows.Take(10).ToList();
+        }
+
         var parameters = new DialogParameters
         {
-            { nameof(DuplicateDialog.Duplicates), duplicateRows }
+            { nameof(DuplicateDialog.Duplicates), firstTenDuplicates },
+            { nameof(DuplicateDialog.DupCount), count }
         };
 
         var dialog = await _dialogService.ShowAsync<DuplicateDialog>("Обнаружены дубликаты", parameters, options);
