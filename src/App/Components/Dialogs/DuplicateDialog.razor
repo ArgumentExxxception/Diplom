@@ -43,6 +43,10 @@
                 }
             </ChildContent>
         </MudExpansionPanel>
+        @if (DupCount > 0)
+        {
+            <MudText>И еще @DupCount дубликатов</MudText>
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="OnOverwriteClicked" Color="Color.Primary" Variant="Variant.Filled">

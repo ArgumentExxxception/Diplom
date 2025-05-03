@@ -47,7 +47,11 @@ builder.Services.AddHttpClient("API", client =>
         CookieContainer = new CookieContainer()
     });
 builder.Services.AddScoped(sp => 
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("API"));
+    new HttpClient 
+    { 
+        BaseAddress = new Uri("http://localhost:5056"),
+        Timeout = TimeSpan.FromMinutes(10)
+    });
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

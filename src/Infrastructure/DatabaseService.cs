@@ -6,6 +6,7 @@ using Core.ServiceInterfaces;
 using Core.Utils;
 using Domain.Enums;
 using Infrastructure.DTOs;
+using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure;
 
@@ -188,8 +189,9 @@ public class DatabaseService: IDatabaseService
             Console.WriteLine($"Ошибка при создании таблицы: {ex.Message}");
             throw new InvalidOperationException("Не удалось создать таблицу. Подробности см. в логах.", ex);
         }
-
     }
+
+
     
     private string EscapeIdentifier(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"")}\"";

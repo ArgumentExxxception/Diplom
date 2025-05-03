@@ -69,13 +69,6 @@ public class DataImportRepository: IDataImportRepository
 public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string, object>> rows, TableModel schema,
     string userEmail, CancellationToken cancellationToken = default)
 {
-    if (await _databaseService.GetTableAsync(schema.TableName) == null)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        
-        await _databaseService.CreateTableAsync(schema);
-        await SaveColumnMetadataAsync(tableName, schema.Columns, cancellationToken);
-    }
     var connection = (NpgsqlConnection)_dbContext.Database.GetDbConnection();
     if (connection.State != ConnectionState.Open)
     {
@@ -217,7 +210,7 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
         }
     }
 
-    private async Task SaveColumnMetadataAsync(string tableName, List<ColumnInfo> columns,
+    public async Task SaveColumnMetadataAsync(string tableName, List<ColumnInfo> columns,
         CancellationToken cancellationToken = default)
     {
         foreach (var col in columns)
@@ -234,6 +227,7 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
 
             await _unitOfWork.ImportColumnMetadatas.Add(metadata);
         }
+        await _unitOfWork.SaveChangesAsync();
     }
 
     public async Task ClearTableAsync(string tableName, CancellationToken cancellationToken = default)
@@ -242,6 +236,57 @@ public async Task ImportDataBatchAsync(string tableName, List<Dictionary<string,
         var sql = $"TRUNCATE \"{tableName}\"";
         await _dbContext.Database.ExecuteSqlRawAsync(sql,cancellationToken);
     }
+    
+    public async Task<HashSet<string>> GetExistingRowKeysAsync(
+        string tableName,
+        List<string> keyColumns,
+        CancellationToken cancellationToken = default)
+    {
+        if (keyColumns == null || keyColumns.Count == 0)
+            return new HashSet<string>();
+
+        var columnList = string.Join(", ", keyColumns.Select(c => $"\"{c}\""));
+        var sql = $"SELECT {columnList} FROM \"{tableName}\"";
+
+        var keys = new HashSet<string>();
+
+        await using var command = _dbContext.Database.GetDbConnection().CreateCommand();
+        command.CommandText = sql;
+
+        if (command.Connection.State != ConnectionState.Open)
+            await command.Connection.OpenAsync(cancellationToken);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var key = string.Join("::", keyColumns.Select(c =>
+                reader[c] is DBNull ? "" : reader[c]?.ToString()?.Trim() ?? ""));
+
+            keys.Add(key);
+        }
+
+        return keys;
+    }
+
+    
+    public async Task CreateIndexesForDuplicateColumnsAsync(string tableName, List<ColumnInfo> columns, CancellationToken cancellationToken = default)
+    {
+        var duplicateCols = columns
+            .Where(c => c.SearchInDuplicates)
+            .Select(c => c.Name)
+            .ToList();
+
+        if (!duplicateCols.Any())
+            return;
+        
+        string indexName = $"idx_{tableName.ToLowerInvariant()}_{string.Join("_", duplicateCols).ToLowerInvariant()}";
+        string columnList = string.Join(", ", duplicateCols.Select(c => $"\"{c}\""));
+        string sql = $@"CREATE INDEX IF NOT EXISTS ""{indexName}"" ON ""{tableName}"" ({columnList});";
+
+        await _dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+    }
+
     
     public async Task<List<Dictionary<string, object>>> GetExistingDataAsync(string tableName, CancellationToken cancellationToken = default)
     {

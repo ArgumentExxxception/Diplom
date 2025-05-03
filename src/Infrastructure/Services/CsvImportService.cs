@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using Core;
 using Core.Errors;
@@ -8,7 +7,6 @@ using Core.Results;
 using Core.ServiceInterfaces;
 using Core.Utils;
 using CsvHelper;
-using CsvHelper.Configuration;
 using Domain.Enums;
 
 namespace Infrastructure.Services;
@@ -16,10 +14,12 @@ namespace Infrastructure.Services;
 public class CsvImportService: ICsvImportService
 {
     private readonly IDataImportRepository _dataImportRepository;
+    private readonly IDatabaseService _databaseService;
 
-    public CsvImportService(IDataImportRepository dataImportRepository)
+    public CsvImportService(IDataImportRepository dataImportRepository, IDatabaseService databaseService)
     {
         _dataImportRepository = dataImportRepository;
+        _databaseService = databaseService;
     }
 
 public async Task ProcessCSVFileAsync(
@@ -31,17 +31,32 @@ public async Task ProcessCSVFileAsync(
     {
         try
         {
-            List<Dictionary<string, object>> existingData = new List<Dictionary<string, object>>();
-            cancellationToken.ThrowIfCancellationRequested();
-
+            List<string> keyColumns = importRequest.Columns.Any(x => x.SearchInDuplicates)
+                ? importRequest.Columns
+                    .Where(c => c.SearchInDuplicates)
+                    .Select(c => c.Name)
+                    .ToList()
+                : [];
+            
+            HashSet<string> existingKeys = new();
+            
             if ((ImportMode)importRequest.ImportMode == ImportMode.Replace)
             {
                 await _dataImportRepository.ClearTableAsync(importRequest.TableName, cancellationToken);
             }
 
-            if (!importRequest.IsNewTable)
+            if (importRequest.IsNewTable)
             {
-                existingData = await _dataImportRepository.GetExistingDataAsync(importRequest.TableName, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+        
+                await _databaseService.CreateTableAsync(new TableModel{ Columns = importRequest.Columns, TableName = importRequest.TableName });
+                await _dataImportRepository.CreateIndexesForDuplicateColumnsAsync(importRequest.TableName, importRequest.Columns, cancellationToken);
+                await _dataImportRepository.SaveColumnMetadataAsync(importRequest.TableName, importRequest.Columns, cancellationToken);
+            }
+            else if (!importRequest.IsNewTable && keyColumns.Count > 0)
+            {
+                existingKeys = await _dataImportRepository
+                    .GetExistingRowKeysAsync(importRequest.TableName, keyColumns, cancellationToken);
             }
 
             using var reader = new StreamReader(fileStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
@@ -132,9 +147,12 @@ public async Task ProcessCSVFileAsync(
                 
                 if (!rowHasErrors)
                 {
-                    if (!importRequest.IsNewTable && existingData.Count > 0)
+                    if (!importRequest.IsNewTable && importRequest.ImportMode == (int)ImportMode.Insert && keyColumns.Count > 0)
                     {
-                        if (DataProcessingUtils.IsDuplicate(rowData, existingData, importRequest.Columns.ToList()))
+                        string rowKey = string.Join("::", keyColumns.Select(col =>
+                            rowData.TryGetValue(col, out var val) ? val?.ToString()?.Trim() ?? "" : ""));
+
+                        if (existingKeys.Contains(rowKey))
                         {
                             duplicatedRows.Add(rowData);
                             importResult.RowsSkipped++;
@@ -143,7 +161,9 @@ public async Task ProcessCSVFileAsync(
                         {
                             rowsToImport.Add(rowData);
                             importResult.RowsInserted++;
+                            existingKeys.Add(rowKey); // чтобы не вставить дубликат в рамках импорта
                         }
+
                     }
                     else
                     {
@@ -156,7 +176,7 @@ public async Task ProcessCSVFileAsync(
 
                 if (rowsToImport.Count >= 1000)
                 {
-                    await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, userName);
+                    await ImportDataInParallelAsync(importRequest.TableName, rowsToImport, new TableModel { Columns = importRequest.Columns, TableName = importRequest.TableName }, userName, cancellationToken);
                     rowsToImport.Clear();
                 }
             }
@@ -175,36 +195,28 @@ public async Task ProcessCSVFileAsync(
         }
     }
 
-    private async Task ImportDataInParallelAsync(string tableName, List<Dictionary<string, object>> rowsToImport, TableModel tableModel, string userName, int maxParallelism = 4)
+    private async Task ImportDataInParallelAsync(
+        string tableName,
+        List<Dictionary<string, object>> rowsToImport,
+        TableModel tableModel,
+        string userName,
+        CancellationToken cancellationToken,
+        int batchSize = 1000,
+        int maxParallelism = 4)
     {
         if (rowsToImport.Count == 0) return;
 
-        int batchSize = 1000;
-        var batches = rowsToImport.Select((row, index) => new { row, index })
+        var batches = rowsToImport
+            .Select((row, index) => new { row, index })
             .GroupBy(x => x.index / batchSize)
-            .Select(g => g.Select(x => x.row).ToList())
-            .ToList();
+            .Select(g => g.Select(x => x.row).ToList());
 
-        using var semaphore = new SemaphoreSlim(maxParallelism);
-        var tasks = new List<Task>();
-
-        foreach (var batch in batches)
-        {
-            await semaphore.WaitAsync();
-
-            tasks.Add(Task.Run(async () =>
+        await Parallel.ForEachAsync(
+            batches,
+            new ParallelOptions { MaxDegreeOfParallelism = maxParallelism },
+            async (batch, _) =>
             {
-                try
-                {
-                    await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel, userName);
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            }));
-        }
-
-        await Task.WhenAll(tasks);
+                await _dataImportRepository.ImportDataBatchAsync(tableName, batch, tableModel, userName, cancellationToken);
+            });
     }
 }

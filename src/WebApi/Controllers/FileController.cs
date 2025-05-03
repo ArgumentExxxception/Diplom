@@ -16,7 +16,7 @@ namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+// [Authorize]
 public class FileController: ControllerBase
 {
     private IMediator _mediator { get; set; }
@@ -60,8 +60,8 @@ public class FileController: ControllerBase
     }
 
     [HttpPost("import")]
-    [RequestSizeLimit(1_073_741_824)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 1_073_741_824)]
+    [RequestSizeLimit(10_737_418_240)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 10_737_418_240)]
     [ProducesResponseType(typeof(ImportResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -89,14 +89,16 @@ public class FileController: ControllerBase
         if (file.Length > 50 * 1024 * 1024)
         {
             await using var stream = file.OpenReadStream();
-            var task = await _backgroundTaskService.EnqueueImportTaskAsync(
+    
+            var command = new EnqueueImportCommand(
                 file.FileName,
                 file.Length,
                 importRequest,
                 stream,
-                file.ContentType,
                 importRequest.UserEmail);
-            
+
+            var task = await _mediator.Send(command, cancellationToken);
+
             return Accepted(new { Message = "Импорт запущен в фоне", TaskId = task.Id });
         }
         else
@@ -109,57 +111,57 @@ public class FileController: ControllerBase
     }
     
     [HttpPost("export")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel exportRequest, CancellationToken cancellationToken)
+[ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+[ProducesResponseType(StatusCodes.Status400BadRequest)]
+[ProducesResponseType(StatusCodes.Status500InternalServerError)]
+public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel exportRequest, CancellationToken cancellationToken)
+{
+    try
     {
-        try
+        if (exportRequest == null)
         {
-            if (exportRequest == null)
-            {
-                return BadRequest("Не получены параметры экспорта");
-            }
+            return BadRequest("Не получены параметры экспорта");
+        }
 
-            if (string.IsNullOrEmpty(exportRequest.TableName))
-            {
-                return BadRequest("Не указано имя таблицы");
-            }
+        if (string.IsNullOrEmpty(exportRequest.TableName))
+        {
+            return BadRequest("Не указано имя таблицы");
+        }
 
-            if (exportRequest.MaxRows == 0)
-            {
-                var estimatedSize = await _mediator.Send(new GetExportDataSizeQuery(exportRequest.TableName, exportRequest.FilterCondition), cancellationToken);
-                
-                if (estimatedSize > 50 * 1024 * 1024)
-                {
-                    var task = await _backgroundTaskService.EnqueueExportTaskAsync(
-                        exportRequest,
-                        exportRequest.UserEmail,
-                        cancellationToken);
-                    
-                    return Accepted(new { Message = "Экспорт запущен в фоне", TaskId = task.Id });
-                }
-            }
-
-            var command = new ExportDataCommand(exportRequest);
-            var (result, fileStream) = await _mediator.Send(command, cancellationToken);
-
-            if (!result.Success)
-            {
-                return BadRequest(new { Message = result.Message });
-            }
-
-            using var memoryStream = new MemoryStream();
-            await fileStream.CopyToAsync(memoryStream, cancellationToken);
-            var fileBytes = memoryStream.ToArray();
+        if (exportRequest.MaxRows == 0)
+        {
+            var estimatedSize = await _mediator.Send(new GetExportDataSizeQuery(exportRequest.TableName, exportRequest.FilterCondition), cancellationToken);
             
-            return File(fileBytes, result.ContentType, result.FileName);
+            if (estimatedSize > 50 * 1024 * 1024)
+            {
+                var task = await _backgroundTaskService.EnqueueExportTaskAsync(
+                    exportRequest,
+                    exportRequest.UserEmail,
+                    cancellationToken);
+                
+                return Accepted(new { Message = "Экспорт запущен в фоне", TaskId = task.Id });
+            }
         }
-        catch (Exception ex)
+
+        var command = new ExportDataCommand(exportRequest);
+        var (result, fileStream) = await _mediator.Send(command, cancellationToken);
+
+        if (!result.Success)
         {
-            return StatusCode(500, new { Message = $"Произошла ошибка при экспорте: {ex.Message}" });
+            return BadRequest(new { Message = result.Message });
         }
+
+        using var memoryStream = new MemoryStream();
+        await fileStream.CopyToAsync(memoryStream, cancellationToken);
+        var fileBytes = memoryStream.ToArray();
+        
+        return File(fileBytes, result.ContentType, result.FileName);
     }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { Message = $"Произошла ошибка при экспорте: {ex.Message}" });
+    }
+}
     
     private Dictionary<string, object?> NormalizeJsonDictionary(JToken item)
     {

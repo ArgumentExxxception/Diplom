@@ -1,4 +1,3 @@
-using System.Text;
 using Core;
 using Core.Handlers;
 using Core.Logging;
@@ -21,6 +20,19 @@ builder.Services.AddSwaggerGen();
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 10L * 1024L * 1024L * 1024L;
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = long.MaxValue;
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
+    options.BufferBodyLengthLimit = long.MaxValue;
+});
+builder.WebHost.ConfigureKestrel(options =>
+{
+    // Увеличиваем максимальный размер запроса до 10 ГБ
+    options.Limits.MaxRequestBodySize = 10L * 1024L * 1024L * 1024L; // 10GB
 });
 
 builder.Services.Configure<FormOptions>(options =>

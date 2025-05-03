@@ -15,7 +15,7 @@ public class ImportDataCommandHandler: IRequestHandler<ImportDataCommand, Import
     
     public async Task<ImportResult> Handle(ImportDataCommand request, CancellationToken cancellationToken)
     {
-        using var stream = request.FileStream;
+        await using var stream = request.FileStream;
         return await _fileHandlerService.ImportDataAsync(
             stream, 
             request.FileName, 
