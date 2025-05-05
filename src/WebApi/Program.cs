@@ -12,8 +12,6 @@ using WebApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -29,11 +27,6 @@ builder.Services.Configure<FormOptions>(options =>
     options.ValueLengthLimit = int.MaxValue;
     options.MultipartHeadersLengthLimit = int.MaxValue;
     options.BufferBodyLengthLimit = long.MaxValue;
-});
-builder.WebHost.ConfigureKestrel(options =>
-{
-    // Увеличиваем максимальный размер запроса до 10 ГБ
-    options.Limits.MaxRequestBodySize = 10L * 1024L * 1024L * 1024L; // 10GB
 });
 
 builder.Services.Configure<FormOptions>(options =>
