@@ -1,4 +1,4 @@
-﻿using Core;
+﻿namespace Core.Results;
 
 public class ExportResult : BaseResult
 {

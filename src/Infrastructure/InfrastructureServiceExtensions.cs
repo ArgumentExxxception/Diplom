@@ -35,6 +35,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IXmlExportService, XmlExportService>();
         services.AddScoped<ICsvExportService, CsvExportService>();
         services.AddScoped<IFileExportService, FileExportService>();
+        services.AddScoped<IDuplicatesUpdateService, DuplicatesUpdateService>();
         
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

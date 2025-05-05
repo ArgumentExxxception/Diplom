@@ -1,3 +1,4 @@
+using System.Text;
 using Core;
 using Core.Handlers;
 using Core.Logging;

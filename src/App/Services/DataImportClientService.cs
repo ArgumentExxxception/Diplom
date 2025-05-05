@@ -22,7 +22,7 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
     {
     }
 
-    public async Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates, List<ColumnInfo> columns)
+    public async Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates, List<ColumnInfo> columns, string userEmail)
     {
         try
         {
@@ -40,6 +40,9 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
             var columnsJson = JsonConvert.SerializeObject(columns);
             var columnsContent = new StringContent(columnsJson, Encoding.UTF8, "application/json");
             content.Add(columnsContent, "columns");
+            
+            var userEmailContent = new StringContent(userEmail, Encoding.UTF8, "text/plain");
+            content.Add(userEmailContent, "userEmail");
 
             var response = await _httpClient.PostAsync("api/File/update-duplicates", content);
 

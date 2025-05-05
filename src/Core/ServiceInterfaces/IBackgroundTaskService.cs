@@ -20,8 +20,13 @@ namespace Core
         Task<List<BackgroundTask>> GetActiveTasksAsync();
 
         Task<BackgroundTask> GetTaskByIdAsync(Guid taskId);
+
+        Task<BackgroundTask> EnqueueUpdateDuplicatesTaskAsync(
+            string tableName,
+            List<Dictionary<string, object>> duplicatedRows,
+            List<ColumnInfo> columns,
+            string userEmail);
         
-        // Если необходима синхронная версия, можно определить метод-обёртку, возвращающий Task<T>
         Task<BackgroundTask> GetTaskById(Guid taskId);
 
         Task<List<BackgroundTask>> GetTasksByUserAsync(string userId);

@@ -242,7 +242,7 @@ public partial class ImportDataPage : ComponentBase
 
         if (result is { Canceled: false })
         {
-            await _dataImportClientService.UpdateDuplicate(tableName, duplicateRows, columns);
+            await _dataImportClientService.UpdateDuplicate(tableName, duplicateRows, columns,_currentUserEmail);
         }
     }
 
