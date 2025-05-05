@@ -18,127 +18,67 @@ public class AuthClientService : HttpClientBase ,IAuthClientService
     public AuthClientService(
         HttpClient httpClient,
         AuthenticationStateProvider authStateProvider,
-        ILocalStorageService localStorage,
         ErrorHandlingService errorHandler)
-        : base(httpClient, localStorage, errorHandler)
+        : base(httpClient, errorHandler)
     {
         _authStateProvider = authStateProvider;
     }
 
-    /// <summary>
-    /// Выполняет вход пользователя
-    /// </summary>
     public async Task<LoginResponse> Login(LoginRequestDto loginRequest)
     {
         try
         {
-            var response = await PostAsync<LoginResponse>("api/auth/login", loginRequest);
+            var response = await PostAsync<UserDto>("api/auth/login", loginRequest);
             
-            if (response.Successful)
+            if (response != null)
             {
-                await _localStorage.SetItemAsync("authToken", response.Token);
-                await _localStorage.SetItemAsync("refreshToken", response.RefreshToken);
-                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(response.Token);
+                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication();
+                return new LoginResponse { Successful = true, User = response };
             }
             
-            return response;
-        }
-        catch (Exception)
-        {
             return new LoginResponse { Successful = false, Error = "Не удалось выполнить вход" };
+        }
+        catch (Exception ex)
+        {
+            return new LoginResponse { Successful = false, Error = "Не удалось выполнить вход: " + ex.Message };
         }
     }
 
-    /// <summary>
-    /// Регистрирует нового пользователя
-    /// </summary>
     public async Task<LoginResponse> Register(RegisterRequestDto registerRequest)
     {
         try
         {
-            var response = await PostAsync<LoginResponse>("api/auth/register", registerRequest);
+            var response = await PostAsync<UserDto>("api/auth/register", registerRequest);
             
-            if (response.Successful)
+            if (response != null)
             {
-                await _localStorage.SetItemAsync("authToken", response.Token);
-                await _localStorage.SetItemAsync("refreshToken", response.RefreshToken);
-                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(response.Token);
+                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication();
+                return new LoginResponse { Successful = true, User = response };
             }
             
-            return response;
-        }
-        catch (Exception)
-        {
             return new LoginResponse { Successful = false, Error = "Не удалось выполнить регистрацию" };
         }
+        catch (Exception ex)
+        {
+            return new LoginResponse { Successful = false, Error = "Не удалось выполнить регистрацию: " + ex.Message };
+        }
     }
-    /// <summary>
-    /// Выполняет выход пользователя
-    /// </summary>
+
     public async Task Logout()
     {
         try
         {
             await PostAsync("api/auth/logout");
-            await _localStorage.RemoveItemAsync("authToken");
-            await _localStorage.RemoveItemAsync("refreshToken");
             ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            await _localStorage.RemoveItemAsync("authToken");
-            await _localStorage.RemoveItemAsync("refreshToken");
-            ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
-        }
-    }
-    
-    public async Task<LoginResponse> RefreshToken()
-    {
-        try
-        {
-            var token = await _localStorage.GetItemAsync<string>("authToken");
-            var refreshToken = await _localStorage.GetItemAsync<string>("refreshToken");
-
-            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(refreshToken))
-                return new LoginResponse { Successful = false, Error = "Отсутствуют токены" };
-
-            var refreshRequest = new RefreshTokenRequestDto
-            {
-                Token = token,
-                RefreshToken = refreshToken
-            };
-
-            var response = await PostAsync<LoginResponse>("api/auth/refresh-token", refreshRequest);
-            
-            if (response.Successful)
-            {
-                await _localStorage.SetItemAsync("authToken", response.Token);
-                await _localStorage.SetItemAsync("refreshToken", response.RefreshToken);
-                ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(response.Token);
-            }
-
-            return response;
-        }
-        catch (Exception)
-        {
-            return new LoginResponse { Successful = false, Error = "Не удалось обновить токен" };
+            _errorHandler.HandleException(ex);
         }
     }
 
-    /// <summary>
-    /// Проверяет, авторизован ли пользователь
-    /// </summary>
-    public async Task<bool> IsUserAuthenticated()
+    public async Task Test()
     {
-        var authState = await _authStateProvider.GetAuthenticationStateAsync();
-        return authState.User.Identity.IsAuthenticated;
-    }
-
-    /// <summary>
-    /// Получает текущий JWT токен
-    /// </summary>
-    public async Task<string> GetToken()
-    {
-        return await _localStorage.GetItemAsync<string>("authToken");
+        await GetAsync<string?>("api/auth/whoami");
     }
 }

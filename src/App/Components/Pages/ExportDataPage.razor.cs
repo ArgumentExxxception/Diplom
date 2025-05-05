@@ -1,12 +1,10 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿using System.Diagnostics;
 using System.Security.Claims;
 using App.Components.Dialogs;
 using App.Interfaces;
-using Blazored.LocalStorage;
 using Core.Models;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 
 namespace App.Components.Pages;
@@ -18,8 +16,6 @@ public partial class ExportDataPage : ComponentBase
     [Inject] private IDialogService _dialogService { get; set; }
     [Inject] private IDatabaseClientService _databaseService { get; set; }
     [Inject] private IDataExportClientService _dataExportClientService { get; set; }
-    [Inject] private AuthenticationStateProvider _authStateProvider { get; set; }
-    [Inject] private ILocalStorageService _localStorage { get; set; }
     
     private List<TableModel> _tables = new();
     private bool isExpanded = false;
@@ -47,16 +43,8 @@ public partial class ExportDataPage : ComponentBase
     protected override async Task OnInitializedAsync()
     {
         await LoadAvailableTables();
-        var authState = await _authStateProvider.GetAuthenticationStateAsync();
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        _currentUserEmail = GetEmailFromToken(token);
-    }
-    
-    private string GetEmailFromToken(string token)
-    {
-        var handler = new JwtSecurityTokenHandler();
-        var jwtToken = handler.ReadJwtToken(token);
-        return jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
     }
 
     private async Task LoadAvailableTables()

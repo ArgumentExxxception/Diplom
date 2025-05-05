@@ -12,17 +12,14 @@ namespace App.Services;
 public class HttpClientBase
 {
     protected readonly HttpClient _httpClient;
-    protected readonly ILocalStorageService _localStorage;
     protected readonly ErrorHandlingService _errorHandler;
     protected readonly JsonSerializerOptions _jsonOptions;
 
     public HttpClientBase(
         HttpClient httpClient, 
-        ILocalStorageService localStorage,
         ErrorHandlingService errorHandler)
     {
         _httpClient = httpClient;
-        _localStorage = localStorage;
         _errorHandler = errorHandler;
         _jsonOptions = new JsonSerializerOptions
         {
@@ -38,8 +35,6 @@ public class HttpClientBase
     {
         try
         {
-            await SetAuthHeaderAsync();
-            
             var response = await _httpClient.GetAsync(uri);
             await HandleResponseAsync(response);
             
@@ -59,8 +54,6 @@ public class HttpClientBase
     {
         try
         {
-            await SetAuthHeaderAsync();
-            
             var content = data != null 
                 ? new StringContent(JsonSerializer.Serialize(data, _jsonOptions), Encoding.UTF8, "application/json") 
                 : null;
@@ -84,7 +77,6 @@ public class HttpClientBase
     {
         try
         {
-            await SetAuthHeaderAsync();
             
             var content = data != null 
                 ? new StringContent(JsonSerializer.Serialize(data, _jsonOptions), Encoding.UTF8, "application/json") 
@@ -107,7 +99,6 @@ public class HttpClientBase
     {
         try
         {
-            await SetAuthHeaderAsync();
             
             var content = new StringContent(JsonSerializer.Serialize(data, _jsonOptions), Encoding.UTF8, "application/json");
             var response = await _httpClient.PutAsync(uri, content);
@@ -129,7 +120,6 @@ public class HttpClientBase
     {
         try
         {
-            await SetAuthHeaderAsync();
             
             var response = await _httpClient.DeleteAsync(uri);
             await HandleResponseAsync(response);
@@ -138,18 +128,6 @@ public class HttpClientBase
         {
             _errorHandler.HandleException(ex);
             throw;
-        }
-    }
-
-    /// <summary>
-    /// Установка заголовка авторизации
-    /// </summary>
-    protected async Task SetAuthHeaderAsync()
-    {
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        if (!string.IsNullOrEmpty(token))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
     }
 

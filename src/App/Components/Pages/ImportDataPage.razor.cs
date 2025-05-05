@@ -23,7 +23,6 @@ public partial class ImportDataPage : ComponentBase
     [Inject] private ISnackbar Snackbar { get; set; }
     [Inject] private IBackgroundTaskService _backgroundTaskService { get; set; }
     [Inject] private AuthenticationStateProvider _authStateProvider { get; set; }
-    [Inject] private ILocalStorageService _localStorage { get; set; }
     
     private MudTabs _tabs;
     private List<TableModel> _tabels = new();
@@ -60,17 +59,10 @@ public partial class ImportDataPage : ComponentBase
     {
         await LoadAvailableTables();
         var authState = await _authStateProvider.GetAuthenticationStateAsync();
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        _currentUserEmail = GetEmailFromToken(token);
+        _currentUserEmail = authState.User?.FindFirst(ClaimTypes.Email)?.Value;
         
     }
-    private string GetEmailFromToken(string token)
-    {
-        var handler = new JwtSecurityTokenHandler();
-        var jwtToken = handler.ReadJwtToken(token);
-        return jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-    }
-
+    
     private async Task LoadAvailableTables()
     {
         try
@@ -250,7 +242,7 @@ public partial class ImportDataPage : ComponentBase
 
         if (result is { Canceled: false })
         {
-            await _dataImportClientService.UpdateDuplicate(tableName, duplicateRows, columns);
+            await _dataImportClientService.UpdateDuplicate(tableName, duplicateRows, columns,_currentUserEmail);
         }
     }
 

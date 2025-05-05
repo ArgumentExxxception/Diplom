@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Text;
 using App.Interfaces;
 using App.Services;
@@ -36,6 +37,15 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 builder.Services.AddMudServices();
+builder.Services.AddHttpClient("API", client => 
+    {
+        client.BaseAddress = new Uri("http://localhost:5056");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler 
+    {
+        UseCookies = true,
+        CookieContainer = new CookieContainer()
+    });
 builder.Services.AddScoped(sp => 
     new HttpClient 
     { 
@@ -59,12 +69,7 @@ builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = long.MaxValue;
 });
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.SaveToken = true;
@@ -83,18 +88,10 @@ builder.Services.AddAuthentication(options =>
 
         options.Events = new JwtBearerEvents
         {
-            OnTokenValidated = async context =>
+            OnMessageReceived = context =>
             {
-                var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
-                var token = context.SecurityToken as JwtSecurityToken;
-                if (token != null)
-                {
-                    var isValid = await authService.ValidateTokenAsync(token.RawData);
-                    if (!isValid)
-                    {
-                        context.Fail("Токен находится в черном списке");
-                    }
-                }
+                context.Token = context.Request.Cookies["AppAccessToken"];
+                return Task.CompletedTask;
             }
         };
     });

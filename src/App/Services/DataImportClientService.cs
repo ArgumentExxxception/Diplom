@@ -17,13 +17,12 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
 {
     public DataImportClientService(
         HttpClient httpClient,
-        ILocalStorageService localStorage,
         ErrorHandlingService errorHandler) 
-        : base(httpClient, localStorage, errorHandler)
+        : base(httpClient, errorHandler)
     {
     }
 
-    public async Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates, List<ColumnInfo> columns)
+    public async Task UpdateDuplicate(string tableName, List<Dictionary<string, object>> duplicates, List<ColumnInfo> columns, string userEmail)
     {
         try
         {
@@ -41,8 +40,10 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
             var columnsJson = JsonConvert.SerializeObject(columns);
             var columnsContent = new StringContent(columnsJson, Encoding.UTF8, "application/json");
             content.Add(columnsContent, "columns");
+            
+            var userEmailContent = new StringContent(userEmail, Encoding.UTF8, "text/plain");
+            content.Add(userEmailContent, "userEmail");
 
-            await SetAuthHeaderAsync();
             var response = await _httpClient.PostAsync("api/File/update-duplicates", content);
 
             if (!response.IsSuccessStatusCode)
@@ -112,9 +113,7 @@ public class DataImportClientService: HttpClientBase,IDataImportClientService
 
             var importRequestJson = System.Text.Json.JsonSerializer.Serialize(importRequest);
             content.Add(new StringContent(importRequestJson, Encoding.UTF8, "application/json"), "importRequestJson");
-
-            await SetAuthHeaderAsync();
-
+            
             var response = await _httpClient.PostAsync("api/File/import", content, cancellationToken);
 
             if (!response.IsSuccessStatusCode)

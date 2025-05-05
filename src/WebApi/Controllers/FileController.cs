@@ -4,6 +4,7 @@ using Core.Commands;
 using Core.Models;
 using Core.Queries;
 using Core.Results;
+using Core.ServiceInterfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,13 +18,14 @@ namespace WebApi.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 // [Authorize]
-public class FileController: ControllerBase
+public class FileController : ControllerBase
 {
     private IMediator _mediator { get; set; }
     private IBackgroundTaskService _backgroundTaskService { get; set; }
     private IFileHandlerService _fileHandlerService { get; set; }
-    
-    public FileController(IFileHandlerService fileHandlerService, IMediator mediator, IBackgroundTaskService backgroundTaskService)
+
+    public FileController(IFileHandlerService fileHandlerService, IMediator mediator,
+        IBackgroundTaskService backgroundTaskService)
     {
         _fileHandlerService = fileHandlerService;
         _mediator = mediator;
@@ -34,23 +36,24 @@ public class FileController: ControllerBase
     public async Task<IActionResult> UpdateDuplicates(
         [FromForm] string tableName,
         [FromForm] string duplicates,
-        [FromForm] string columns)
+        [FromForm] string columns,
+        [FromForm] string userEmail)
     {
         try
         {
-            string userName = HttpContext.User.Identity?.Name;
             var columnInfoList = JsonConvert.DeserializeObject<List<ColumnInfo>>(columns);
             if (columnInfoList == null)
                 return BadRequest(new { Message = "Не удалось десериализовать структуру колонок" });
-            
+
             var duplicatesArray = JArray.Parse(duplicates);
             var duplicatesDictionary = duplicatesArray
                 .Select(item => NormalizeJsonDictionary(item))
                 .ToList();
-            
-            await _mediator.Send(new UpdateDuplicatesCommand(tableName, duplicatesDictionary, columnInfoList, userName));
+            var updateDuplicatesCmd = new EnqueueUpdateDuplicatesCommand(tableName, duplicatesDictionary, columnInfoList,userEmail);
 
-            return Ok(new { Message = "Дубликаты успешно обновлены", TableName = tableName });
+            await _mediator.Send(updateDuplicatesCmd);
+
+            return Ok(new { Message = "Обновление успешно запущено в фоновом процессе", TableName = tableName });
         }
         catch (Exception ex)
         {
@@ -65,8 +68,8 @@ public class FileController: ControllerBase
     [ProducesResponseType(typeof(ImportResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<ImportResult>> ImportData([FromForm] IFormFile file, 
-        [FromForm] string importRequestJson, 
+    public async Task<ActionResult<ImportResult>> ImportData([FromForm] IFormFile file,
+        [FromForm] string importRequestJson,
         CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
@@ -78,7 +81,7 @@ public class FileController: ControllerBase
         try
         {
             importRequest = JsonSerializer.Deserialize<TableImportRequestModel>(
-                importRequestJson, 
+                importRequestJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new JsonException();
         }
         catch (JsonException)
@@ -89,7 +92,7 @@ public class FileController: ControllerBase
         if (file.Length > 50 * 1024 * 1024)
         {
             await using var stream = file.OpenReadStream();
-    
+
             var command = new EnqueueImportCommand(
                 file.FileName,
                 file.Length,
@@ -110,60 +113,64 @@ public class FileController: ControllerBase
             return Ok(result);
         }
     }
-    
+
     [HttpPost("export")]
-[ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-[ProducesResponseType(StatusCodes.Status400BadRequest)]
-[ProducesResponseType(StatusCodes.Status500InternalServerError)]
-public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel exportRequest, CancellationToken cancellationToken)
-{
-    try
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel exportRequest,
+        CancellationToken cancellationToken)
     {
-        if (exportRequest == null)
+        try
         {
-            return BadRequest("Не получены параметры экспорта");
-        }
-
-        if (string.IsNullOrEmpty(exportRequest.TableName))
-        {
-            return BadRequest("Не указано имя таблицы");
-        }
-
-        if (exportRequest.MaxRows == 0)
-        {
-            var estimatedSize = await _mediator.Send(new GetExportDataSizeQuery(exportRequest.TableName, exportRequest.FilterCondition), cancellationToken);
-            
-            if (estimatedSize > 50 * 1024 * 1024)
+            if (exportRequest == null)
             {
-                var task = await _backgroundTaskService.EnqueueExportTaskAsync(
-                    exportRequest,
-                    exportRequest.UserEmail,
-                    cancellationToken);
-                
-                return Accepted(new { Message = "Экспорт запущен в фоне", TaskId = task.Id });
+                return BadRequest("Не получены параметры экспорта");
             }
+
+            if (string.IsNullOrEmpty(exportRequest.TableName))
+            {
+                return BadRequest("Не указано имя таблицы");
+            }
+
+            if (exportRequest.MaxRows == 0)
+            {
+                var estimatedSize =
+                    await _mediator.Send(
+                        new GetExportDataSizeQuery(exportRequest.TableName, exportRequest.FilterCondition),
+                        cancellationToken);
+
+                if (estimatedSize > 50 * 1024 * 1024)
+                {
+                    var task = await _backgroundTaskService.EnqueueExportTaskAsync(
+                        exportRequest,
+                        exportRequest.UserEmail,
+                        cancellationToken);
+
+                    return Accepted(new { Message = "Экспорт запущен в фоне", TaskId = task.Id });
+                }
+            }
+
+            var command = new ExportDataCommand(exportRequest);
+            var (result, fileStream) = await _mediator.Send(command, cancellationToken);
+
+            if (!result.Success)
+            {
+                return BadRequest(new { Message = result.Message });
+            }
+
+            using var memoryStream = new MemoryStream();
+            await fileStream.CopyToAsync(memoryStream, cancellationToken);
+            var fileBytes = memoryStream.ToArray();
+
+            return File(fileBytes, result.ContentType, result.FileName);
         }
-
-        var command = new ExportDataCommand(exportRequest);
-        var (result, fileStream) = await _mediator.Send(command, cancellationToken);
-
-        if (!result.Success)
+        catch (Exception ex)
         {
-            return BadRequest(new { Message = result.Message });
+            return StatusCode(500, new { Message = $"Произошла ошибка при экспорте: {ex.Message}" });
         }
+    }
 
-        using var memoryStream = new MemoryStream();
-        await fileStream.CopyToAsync(memoryStream, cancellationToken);
-        var fileBytes = memoryStream.ToArray();
-        
-        return File(fileBytes, result.ContentType, result.FileName);
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { Message = $"Произошла ошибка при экспорте: {ex.Message}" });
-    }
-}
-    
     private Dictionary<string, object?> NormalizeJsonDictionary(JToken item)
     {
         return item.Children<JProperty>()
@@ -172,7 +179,7 @@ public async Task<IActionResult> ExportData([FromBody] TableExportRequestModel e
                 prop => GetValueFromToken(prop.Value)
             );
     }
-    
+
     private object? GetValueFromToken(JToken token)
     {
         return token.Type switch

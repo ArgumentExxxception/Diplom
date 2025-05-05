@@ -9,9 +9,8 @@ public class DatabaseClientService : HttpClientBase,IDatabaseClientService
 {
     public DatabaseClientService(
         HttpClient httpClient,
-        ILocalStorageService localStorage,
         ErrorHandlingService errorHandler) 
-        : base(httpClient, localStorage, errorHandler)
+        : base(httpClient, errorHandler)
     {
     }
 

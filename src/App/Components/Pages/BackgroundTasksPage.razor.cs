@@ -1,23 +1,22 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using App.Components.Dialogs;
-using Blazored.LocalStorage;
 using Core.Models;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 
 namespace App.Components.Pages;
 
 public partial class BackgroundTasksPage : ComponentBase, IDisposable
 {
-    [Inject] private ILocalStorageService _localStorage { get; set; }
-    
+    [Inject] private AuthenticationStateProvider _authenticationStateProvider { get; set; }
     private List<BackgroundTask> tasks = new();
     private List<BackgroundTask> filteredTasks = new();
     private List<BackgroundTask> paginatedTasks = new();
     private bool isLoading = true;
-    private string userId;
+    private string userEmail;
     private BackgroundTaskStatus? statusFilter = null;
     private int rowsPerPage = 10;
     private int page = 0;
@@ -29,8 +28,7 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
         isLoading = true;
         
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var token = await _localStorage.GetItemAsync<string>("authToken");
-        userId = GetEmailFromToken(token);
+        userEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
         
         await RefreshTasks();
         
@@ -43,19 +41,12 @@ public partial class BackgroundTasksPage : ComponentBase, IDisposable
         BackgroundTaskService.TaskStatusChanged += OnTaskStatusChanged;
         BackgroundTaskService.TaskCompleted += OnTaskCompleted;
     }
-    
-    private string GetEmailFromToken(string token)
-    {
-        var handler = new JwtSecurityTokenHandler();
-        var jwtToken = handler.ReadJwtToken(token);
-        return jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-    }
 
     private async Task RefreshTasks()
     {
         isLoading = true;
         
-        tasks = await BackgroundTaskService.GetTasksByUserAsync(userId);
+        tasks = await BackgroundTaskService.GetTasksByUserAsync(userEmail);
         
         ApplyFilters();
         
